@@ -55,31 +55,8 @@ request, rather than only when its TTL naturally expires.
 
 The remaining endpoints are thin proxies onto the Central API, using request/response shapes
 local to the Bridge (not the Central API's own DTOs) to keep the mod-facing contract independent
-of Kiota's generated types:
-
-| Method | Route |
-|---|---|
-| `POST` | `banks` |
-| `GET` | `banks` |
-| `POST` | `banks/{bankId}/accounts` |
-| `GET` | `characters/{characterId}/bank-accounts` |
-| `GET` | `companies/{companyId}/bank-accounts` |
-| `GET` | `bank-accounts/{bankAccountId}` |
-| `GET` | `bank-accounts/{bankAccountId}/transactions` |
-| `PUT` | `bank-accounts/{bankAccountId}/deposit` |
-| `PUT` | `bank-accounts/{bankAccountId}/withdraw` |
-| `PUT` | `bank-accounts/{bankAccountId}/transaction` |
-| `POST` | `characters` |
-| `GET` | `accounts/{accountId}/characters` |
-| `POST` | `companies` |
-| `GET` | `companies` |
-| `GET` | `companies/{companyId}` |
-| `POST` | `companies/{companyId}/members` |
-| `POST` | `companies/{companyId}/applications` |
-| `GET` | `companies/{companyId}/applications` |
-| `PUT` | `companies/{companyId}/applications/{applicationId}/confirm` |
-| `PUT` | `companies/{companyId}/applications/{applicationId}/accept` |
-| `PUT` | `companies/{companyId}/applications/{applicationId}/deny` |
+of Kiota's generated types. See `/docs` (Scalar UI, dev-only) or `/openapi/v1.json` on a running
+instance for the current route list.
 
 One caveat worth knowing if you touch these: several Central API response fields (bank fees,
 balances, transaction amounts, member counts) come back from Kiota as its own `UntypedNode`

@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    # Same image as .devcontainer/Dockerfile's base — pins the preview SDK/runtime
+    # from global.json without needing a devcontainer/compose build in CI.
+    container: mcr.microsoft.com/devcontainers/dotnet:2.1.4-11.0-preview
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore
+        run: dotnet restore ELifeRPG.Bridge.slnx
+
+      - name: Build
+        run: dotnet build ELifeRPG.Bridge.slnx --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test ELifeRPG.Bridge.slnx --no-build --configuration Release
