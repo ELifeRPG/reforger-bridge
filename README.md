@@ -4,10 +4,11 @@ The gameserver-local process the ArmA Reforger mod actually talks to — the mod
 Central API (`eliferpg-core`) directly. Listens on `http://localhost:5200`. No auth on any of its
 own endpoints — it's meant to be called only from the same machine (the gameserver process).
 
-Talks to the Central API exclusively over HTTP, through `ApiClient`, a
+Talks to the Central API exclusively over HTTP, through
+[`ELifeRPG.BackendApiClient`](https://github.com/ELifeRPG/backend-api-client-dotnet), a
 [Kiota](https://learn.microsoft.com/openapi/kiota/)-generated C# client built from Core's OpenAPI
-spec. There is no project or source dependency on `eliferpg-core` — only a runtime HTTP dependency
-and, for client regeneration, a running Core instance to fetch the spec from.
+spec and consumed here as a NuGet package. There is no project or source dependency on
+`eliferpg-core` — only a runtime HTTP dependency.
 
 ## Running
 
@@ -67,27 +68,27 @@ typed as the `UntypedNode` base always throws `NotImplementedException`, regardl
 runtime type. `UntypedNodeExtensions.ToDecimal()`/`ToInt32()` (`src/Api/UntypedNodeExtensions.cs`)
 handle this correctly — use those, not `.GetValue()` directly, in any new proxy endpoint.
 
-## Regenerating the API client
+## Consuming the API client
 
-`src/ApiClient/Generated` is Kiota-generated — never hand-edit it. Unlike a same-repo
-setup, the OpenAPI spec isn't a local build artifact here: it's fetched live from a running
-Central API instance. First time, restore the local `kiota` tool (defined in
-`.config/dotnet-tools.json`):
+This repo no longer generates its own Kiota client. `src/Api` references the
+[`ELifeRPG.BackendApiClient`](https://github.com/ELifeRPG/backend-api-client-dotnet) NuGet
+package (published to GitHub Packages) instead of an in-solution `ApiClient` project — the client
+is generated and versioned centrally there, against `eliferpg-core`'s OpenAPI spec.
+
+`NuGet.config` at the repo root adds the `eliferpg-github` package source. Restoring requires a
+GitHub PAT with `read:packages`, supplied via the `GITHUB_PACKAGES_USERNAME`/
+`GITHUB_PACKAGES_TOKEN` environment variables (or set them as NuGet config values through
+whatever secret store the devcontainer/CI environment uses).
+
+To pick up a new client version after a breaking or additive Central API change:
 
 ```sh
-dotnet tool restore
+dotnet add src/Api/Api.csproj package ELifeRPG.BackendApiClient --version <new-version>
 ```
 
-Then, with `eliferpg-core`'s Central API running (defaults to `http://localhost:5100`):
-
-```sh
-bash scripts/generate-bridge-client.sh
-# or, against a different Core instance:
-CORE_API_URL=http://localhost:5100 bash scripts/generate-bridge-client.sh
-```
-
-Kiota's CLI targets a stable .NET runtime, not the preview one this repo builds against (see
-`global.json`) — make sure a stable .NET SDK/runtime is also installed alongside it.
+then update the `<PackageVersion>` entry in `Directory.Packages.props` to match (central package
+management requires both to agree) and review `backend-api-client-dotnet`'s release notes for
+that version for any breaking changes to react to.
 
 ## Relationship to eliferpg-core
 
@@ -96,7 +97,8 @@ code-wise, it was already fully decoupled — no project references into Core, n
 only — so keeping it in the same repo/solution gained nothing beyond a shared build. It now
 follows the same pattern as `eliferpg-core`'s other out-of-repo consumers (Admin UI, NPC
 Simulation Module): its own repo, own solution, consuming the Central API only through a
-generated client. See `eliferpg-core`'s `ARCHITECTURE.md` §3.2/§9b/§9c for the full picture.
+generated client — now via the shared `backend-api-client-dotnet` package rather than its own
+Kiota generation. See `eliferpg-core`'s `ARCHITECTURE.md` §3.2/§9b/§9c for the full picture.
 
 ## Documentation site
 

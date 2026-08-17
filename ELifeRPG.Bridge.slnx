@@ -1,6 +1,5 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/ApiClient/ApiClient.csproj" />
     <Project Path="src/Api/Api.csproj" />
   </Folder>
 </Solution>

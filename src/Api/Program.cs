@@ -1,4 +1,4 @@
-using ELifeRPG.Bridge.ApiClient;
+using ELifeRPG.BackendApiClient;
 using ELifeRPG.Bridge.Api.Authentication;
 using ELifeRPG.Bridge.Api.Configuration;
 using ELifeRPG.Bridge.Api.Endpoints;
