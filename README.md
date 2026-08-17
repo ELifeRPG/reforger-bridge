@@ -1,0 +1,122 @@
+# eliferpg-reforger-bridge
+
+The gameserver-local process the ArmA Reforger mod actually talks to — the mod never calls the
+Central API (`eliferpg-core`) directly. Listens on `http://localhost:5200`. No auth on any of its
+own endpoints — it's meant to be called only from the same machine (the gameserver process).
+
+Talks to the Central API exclusively over HTTP, through `ApiClient`, a
+[Kiota](https://learn.microsoft.com/openapi/kiota/)-generated C# client built from Core's OpenAPI
+spec. There is no project or source dependency on `eliferpg-core` — only a runtime HTTP dependency
+and, for client regeneration, a running Core instance to fetch the spec from.
+
+## Running
+
+Requires `eliferpg-core`'s Central API (`src/Api`) and Keycloak running locally first (see that
+repo's README). Then, from this repo:
+
+```sh
+dotnet run --project src/Api/Api.csproj
+```
+
+`src/Api/appsettings.Development.json` points `CentralApi:BaseUrl` at
+`http://localhost:5100` by default.
+
+## Connection and session lifecycle
+
+`POST player-connected` is a local-only stand-in for the mod's connection hook (real Reforger
+integration is separate, later work):
+
+```sh
+curl -X POST http://localhost:5200/player-connected \
+  -H "Content-Type: application/json" \
+  -d '{"bohemiaId":"11111111-1111-1111-1111-111111111111"}'
+```
+
+This exercises the full chain: Bridge → Central API (creates the account + a real Keycloak user,
+if new) → Bridge exchanges its own Client Credentials token directly against Keycloak for one
+impersonating that player → returns the player's access token to the caller. It also records,
+Bridge-locally (`PlayerSessionTracker`, in-memory, lost on Bridge restart), that this Bohemia ID
+is connected.
+
+If the account is blocked, `player-connected` still returns `200`, but with `"status": "blocked"`,
+`"playerAccessToken": null`, and no Bridge-local session recorded — the token-exchange step is
+skipped entirely, so a blocked player never receives a token.
+
+Character sessions are a separate, later moment — `POST character-selected`
+(`{"bohemiaId": "...", "characterId": "..."}`), fired once the player actually picks a character
+at the in-game character-select screen, starts that character's session **in the Central API**.
+`POST player-disconnected` (`{"bohemiaId": "..."}`) ends both: it clears the Bridge-local
+connection record and ends whatever character session was last selected for that Bohemia ID (if
+any) in the Central API. It also revokes that player's access token immediately — Bridge calls
+the Central API to revoke it by `jti`, so the Central API rejects that token on the very next
+request, rather than only when its TTL naturally expires.
+
+## Proxy endpoints
+
+The remaining endpoints are thin proxies onto the Central API, using request/response shapes
+local to the Bridge (not the Central API's own DTOs) to keep the mod-facing contract independent
+of Kiota's generated types:
+
+| Method | Route |
+|---|---|
+| `POST` | `banks` |
+| `GET` | `banks` |
+| `POST` | `banks/{bankId}/accounts` |
+| `GET` | `characters/{characterId}/bank-accounts` |
+| `GET` | `companies/{companyId}/bank-accounts` |
+| `GET` | `bank-accounts/{bankAccountId}` |
+| `GET` | `bank-accounts/{bankAccountId}/transactions` |
+| `PUT` | `bank-accounts/{bankAccountId}/deposit` |
+| `PUT` | `bank-accounts/{bankAccountId}/withdraw` |
+| `PUT` | `bank-accounts/{bankAccountId}/transaction` |
+| `POST` | `characters` |
+| `GET` | `accounts/{accountId}/characters` |
+| `POST` | `companies` |
+| `GET` | `companies` |
+| `GET` | `companies/{companyId}` |
+| `POST` | `companies/{companyId}/members` |
+| `POST` | `companies/{companyId}/applications` |
+| `GET` | `companies/{companyId}/applications` |
+| `PUT` | `companies/{companyId}/applications/{applicationId}/confirm` |
+| `PUT` | `companies/{companyId}/applications/{applicationId}/accept` |
+| `PUT` | `companies/{companyId}/applications/{applicationId}/deny` |
+
+One caveat worth knowing if you touch these: several Central API response fields (bank fees,
+balances, transaction amounts, member counts) come back from Kiota as its own `UntypedNode`
+wrapper rather than `decimal`/`int`, since Kiota doesn't support OpenAPI's `format: double`/
+`int32` cleanly. `UntypedNode.GetValue()` looks like the way to unwrap one but is hidden (not
+virtually overridden) by each concrete subtype — calling it through a variable/property statically
+typed as the `UntypedNode` base always throws `NotImplementedException`, regardless of the real
+runtime type. `UntypedNodeExtensions.ToDecimal()`/`ToInt32()` (`src/Api/UntypedNodeExtensions.cs`)
+handle this correctly — use those, not `.GetValue()` directly, in any new proxy endpoint.
+
+## Regenerating the API client
+
+`src/ApiClient/Generated` is Kiota-generated — never hand-edit it. Unlike a same-repo
+setup, the OpenAPI spec isn't a local build artifact here: it's fetched live from a running
+Central API instance. First time, restore the local `kiota` tool (defined in
+`.config/dotnet-tools.json`):
+
+```sh
+dotnet tool restore
+```
+
+Then, with `eliferpg-core`'s Central API running (defaults to `http://localhost:5100`):
+
+```sh
+bash scripts/generate-bridge-client.sh
+# or, against a different Core instance:
+CORE_API_URL=http://localhost:5100 bash scripts/generate-bridge-client.sh
+```
+
+Kiota's CLI targets a stable .NET runtime, not the preview one this repo builds against (see
+`global.json`) — make sure a stable .NET SDK/runtime is also installed alongside it.
+
+## Relationship to eliferpg-core
+
+This repo used to live inside `eliferpg-core` (`src/Bridge/`). It was split out because,
+code-wise, it was already fully decoupled — no project references into Core, no shared DB, HTTP
+only — so keeping it in the same repo/solution gained nothing beyond a shared build. It now
+follows the same pattern as `eliferpg-core`'s other out-of-repo consumers (Admin UI, NPC
+Simulation Module): its own repo, own solution, consuming the Central API only through a
+generated client. See `eliferpg-core`'s `ARCHITECTURE.md` §3.2/§9b/§9c for the full picture.

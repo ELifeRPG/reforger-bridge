@@ -1,0 +1,11 @@
+services:
+  workspace:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: "sleep infinity"
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Development"
+    volumes:
+      - "../:/workspace:cached"
+      - "${HOME}/.gitconfig:/home/vscode/.gitconfig:ro"
