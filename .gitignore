@@ -21,3 +21,9 @@ Thumbs.db
 ## Project tooling
 .serena/
 dotnet/
+
+## Docs site (zensical)
+.venv/
+site/
+.cache/
+__pycache__/

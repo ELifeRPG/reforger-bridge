@@ -97,3 +97,21 @@ only — so keeping it in the same repo/solution gained nothing beyond a shared 
 follows the same pattern as `eliferpg-core`'s other out-of-repo consumers (Admin UI, NPC
 Simulation Module): its own repo, own solution, consuming the Central API only through a
 generated client. See `eliferpg-core`'s `ARCHITECTURE.md` §3.2/§9b/§9c for the full picture.
+
+## Documentation site
+
+The in-repo `docs/` directory is the source for the rendered site; it's built with
+[Zensical](https://zensical.org/) and deployed to GitHub Pages on push to `main` (see
+`.github/workflows/docs.yml`). This `README` and `AGENTS.md` cover build/run instructions instead
+and intentionally stay off the rendered site.
+
+Requires Python `>=3.13` and [uv](https://docs.astral.sh/uv/) — independent of the .NET devcontainer
+used for the Bridge itself:
+
+```sh
+uv sync
+uv run zensical serve -f zensical.yml
+```
+
+For the shared, project-wide documentation site (architecture across all ELifeRPG repos), see
+[ELifeRPG/docs](https://github.com/ELifeRPG/docs).
