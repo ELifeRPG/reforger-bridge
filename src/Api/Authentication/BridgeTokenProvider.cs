@@ -1,9 +1,10 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Text.Json.Serialization;
+using ELifeRPG.Bridge.Api.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.Kiota.Abstractions.Authentication;
 
-namespace ELifeRPG.Bridge.Api;
+namespace ELifeRPG.Bridge.Api.Authentication;
 
 public sealed record PlayerToken(string AccessToken, string Jti, int ExpiresInSeconds);
 

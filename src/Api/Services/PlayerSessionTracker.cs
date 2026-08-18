@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace ELifeRPG.Bridge.Api;
+namespace ELifeRPG.Bridge.Api.Services;
 
 public sealed record PlayerSession(Guid AccountId, string? Jti, DateTimeOffset ExpiresAt, DateTimeOffset ConnectedAt, Guid? ActiveCharacterId = null);
 
@@ -34,4 +34,24 @@ public sealed class PlayerSessionTracker
     }
 
     public PlayerSession? End(Guid bohemiaId) => _sessions.TryRemove(bohemiaId, out var session) ? session : null;
+
+    public AccountResolution ResolveAccountId(Guid bohemiaId)
+    {
+        var session = Get(bohemiaId);
+        return session is null ? AccountResolution.NotFound() : AccountResolution.Found(session.AccountId);
+    }
+}
+
+/// <summary>
+/// Result of resolving a Bohemia ID to a backend AccountId via <see cref="PlayerSessionTracker.ResolveAccountId"/>.
+/// Bundles a ready-to-return 404 <see cref="IResult"/> for the not-found case so callers don't have to
+/// duplicate that check.
+/// </summary>
+public readonly record struct AccountResolution(Guid? AccountId, IResult? Error)
+{
+    public static AccountResolution Found(Guid accountId) => new(accountId, null);
+
+    public static AccountResolution NotFound() => new(
+        null,
+        Results.Problem("No active session for this Bohemia ID.", statusCode: StatusCodes.Status404NotFound));
 }

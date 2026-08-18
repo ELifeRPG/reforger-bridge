@@ -1,4 +1,4 @@
-namespace ELifeRPG.Bridge.Api;
+namespace ELifeRPG.Bridge.Api.Configuration;
 
 public sealed class KeycloakOptions
 {

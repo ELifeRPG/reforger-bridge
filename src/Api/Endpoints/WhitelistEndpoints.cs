@@ -1,7 +1,9 @@
 using ELifeRPG.Bridge.ApiClient;
 using ApiModels = ELifeRPG.Bridge.ApiClient.Models;
 
-namespace ELifeRPG.Bridge.Api;
+using ELifeRPG.Bridge.Api.Services;
+
+namespace ELifeRPG.Bridge.Api.Endpoints;
 
 public static class WhitelistEndpoints
 {

@@ -1,5 +1,9 @@
 using ELifeRPG.Bridge.ApiClient;
-using ELifeRPG.Bridge.Api;
+using ELifeRPG.Bridge.Api.Authentication;
+using ELifeRPG.Bridge.Api.Configuration;
+using ELifeRPG.Bridge.Api.Endpoints;
+using ELifeRPG.Bridge.Api.OpenApi;
+using ELifeRPG.Bridge.Api.Services;
 using Microsoft.Kiota.Abstractions.Authentication;
 using Microsoft.Kiota.Http.HttpClientLibrary;
 using Scalar.AspNetCore;
@@ -60,6 +64,7 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+app.MapAccountEndpoints();
 app.MapSessionEndpoints();
 app.MapBankingEndpoints();
 app.MapCharacterEndpoints();

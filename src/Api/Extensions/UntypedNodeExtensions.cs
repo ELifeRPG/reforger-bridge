@@ -1,6 +1,6 @@
 using Microsoft.Kiota.Abstractions.Serialization;
 
-namespace ELifeRPG.Bridge.Api;
+namespace ELifeRPG.Bridge.Api.Extensions;
 
 /// <summary>
 /// Several Central API response fields (bank fees, balances, transaction amounts, member counts)

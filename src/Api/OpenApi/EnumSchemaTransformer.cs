@@ -2,7 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 
-namespace ELifeRPG.Bridge.Api;
+namespace ELifeRPG.Bridge.Api.OpenApi;
 
 // Microsoft.AspNetCore.OpenApi doesn't emit x-enum-varnames for enum schemas (unlike NSwag), which
 // is what lets OpenAPI-based client generators (e.g. Kiota) produce a named enum type instead of a
