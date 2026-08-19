@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 
 namespace ELifeRPG.Bridge.Api.Services;
 
-public sealed record PlayerSession(Guid AccountId, string? Jti, DateTimeOffset ExpiresAt, DateTimeOffset ConnectedAt, Guid? ActiveCharacterId = null);
+public sealed record PlayerSession(Guid AccountId, DateTimeOffset ConnectedAt, Guid? ActiveCharacterId = null);
 
 /// <summary>
 /// Bridge-local record of which players are currently connected and which character (if any)
@@ -17,8 +17,8 @@ public sealed class PlayerSessionTracker
 {
     private readonly ConcurrentDictionary<Guid, PlayerSession> _sessions = new();
 
-    public void Start(Guid bohemiaId, Guid accountId, string? jti, DateTimeOffset expiresAt)
-        => _sessions[bohemiaId] = new PlayerSession(accountId, jti, expiresAt, DateTimeOffset.UtcNow);
+    public void Start(Guid bohemiaId, Guid accountId)
+        => _sessions[bohemiaId] = new PlayerSession(accountId, DateTimeOffset.UtcNow);
 
     public PlayerSession? Get(Guid bohemiaId) => _sessions.TryGetValue(bohemiaId, out var session) ? session : null;
 

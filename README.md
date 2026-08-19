@@ -34,23 +34,20 @@ curl -X POST http://localhost:5200/player-connected \
 ```
 
 This exercises the full chain: Bridge → Central API (creates the account + a real Keycloak user,
-if new) → Bridge exchanges its own Client Credentials token directly against Keycloak for one
-impersonating that player → returns the player's access token to the caller. It also records,
-Bridge-locally (`PlayerSessionTracker`, in-memory, lost on Bridge restart), that this Bohemia ID
-is connected.
+if new). It also records, Bridge-locally (`PlayerSessionTracker`, in-memory, lost on Bridge
+restart), that this Bohemia ID is connected and which `AccountId` it maps to — every other
+mod-facing endpoint that needs an `AccountId` (character listing/creation, whitelist application)
+resolves it from this tracked session rather than requiring the mod to know or pass it around.
 
-If the account is blocked, `player-connected` still returns `200`, but with `"status": "blocked"`,
-`"playerAccessToken": null`, and no Bridge-local session recorded — the token-exchange step is
-skipped entirely, so a blocked player never receives a token.
+If the account is blocked, `player-connected` still returns `200`, but with `"status": "blocked"`
+and no Bridge-local session recorded.
 
 Character sessions are a separate, later moment — `POST character-selected`
 (`{"bohemiaId": "...", "characterId": "..."}`), fired once the player actually picks a character
 at the in-game character-select screen, starts that character's session **in the Central API**.
 `POST player-disconnected` (`{"bohemiaId": "..."}`) ends both: it clears the Bridge-local
 connection record and ends whatever character session was last selected for that Bohemia ID (if
-any) in the Central API. It also revokes that player's access token immediately — Bridge calls
-the Central API to revoke it by `jti`, so the Central API rejects that token on the very next
-request, rather than only when its TTL naturally expires.
+any) in the Central API.
 
 ## Proxy endpoints
 

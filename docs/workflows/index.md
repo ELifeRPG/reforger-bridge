@@ -5,15 +5,15 @@ icon: lucide/workflow
 # Workflows
 
 Four calls from the game (via the mod) into the Bridge drive everything described here. Each
-results in a call onward to the Central API, to Keycloak, or both. The mod only ever supplies a
-player's Bohemia ID — the Bridge resolves `AccountId` internally wherever it's needed (from the
-session established by `player-connected`), so the mod never has to know or pass it around itself.
+results in a call onward to the Central API. The mod only ever supplies a player's Bohemia ID —
+the Bridge resolves `AccountId` internally wherever it's needed (from the session established by
+`player-connected`), so the mod never has to know or pass it around itself.
 
 ## Player connects
 
-`POST player-connected {bohemiaId}` — fired when a player connects to the gameserver. Starts a
-Bridge session for the account and exchanges it for a player access token, unless the account is
-blocked or not yet whitelisted. See [Login & Session Bootstrap](login.md) for the full flow.
+`POST player-connected {bohemiaId}` — fired when a player connects to the gameserver. Resolves (or
+provisions) the account and starts a Bridge session for it, whether or not the account is blocked
+or not yet whitelisted. See [Login & Session Bootstrap](login.md) for the full flow.
 
 ## Character selected
 
@@ -24,16 +24,14 @@ session for on disconnect.
 
 ## Player disconnects
 
-`POST player-disconnected {bohemiaId}` — ends the Bridge's local record of the connection, revokes
-the player's access token immediately (by `jti`, rather than waiting for its ~5-minute TTL to
-expire naturally), and ends whatever character session was last selected, if any, in the Central
-API.
+`POST player-disconnected {bohemiaId}` — ends the Bridge's local record of the connection, and
+ends whatever character session was last selected, if any, in the Central API.
 
 ## Whitelist application submitted
 
 `POST submit-whitelist-application {bohemiaId, applicationText}` — resolves the caller's
 `AccountId` from their already-tracked Bridge session (so this works even for a not-yet-whitelisted
-player, who has a session but no token) and forwards the application to the Central API.
+player) and forwards the application to the Central API.
 
 ## Proxy endpoints
 

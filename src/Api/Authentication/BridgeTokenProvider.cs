@@ -1,4 +1,3 @@
-using System.IdentityModel.Tokens.Jwt;
 using System.Text.Json.Serialization;
 using ELifeRPG.Bridge.Api.Configuration;
 using Microsoft.Extensions.Options;
@@ -6,21 +5,9 @@ using Microsoft.Kiota.Abstractions.Authentication;
 
 namespace ELifeRPG.Bridge.Api.Authentication;
 
-public sealed record PlayerToken(string AccessToken, string Jti, int ExpiresInSeconds);
-
 /// <summary>
-/// Owns the Bridge's own Client Credentials token (cached, refreshed before expiry) and performs
-/// the player-impersonating token exchange directly against Keycloak — never through the Central API,
-/// since Keycloak requires the exchange to be authenticated by the same client the subject token was
-/// issued to (see ARCHITECTURE.md §4.3).
-///
-/// ExchangeForPlayerTokenAsync requires the caller's already-known session status and only exchanges
-/// for "active" — a blocked or not-whitelisted account gets no token. This check exists here, not in
-/// the caller, because Keycloak's own token-exchange grant does not enforce account status
-/// (verified — see ARCHITECTURE.md §4.3): a disabled user's exchange still succeeds at the Keycloak
-/// layer. Putting the gate inside this method means any future caller that wants a player token goes
-/// through this same check automatically, instead of every call site needing to remember to check
-/// status first.
+/// Owns the Bridge's own Client Credentials token, cached and refreshed before expiry, used to
+/// authenticate every Bridge → Central API call.
 /// </summary>
 public sealed class BridgeTokenProvider(HttpClient httpClient, IOptions<KeycloakOptions> options) : IAccessTokenProvider
 {
@@ -65,31 +52,6 @@ public sealed class BridgeTokenProvider(HttpClient httpClient, IOptions<Keycloak
         {
             _lock.Release();
         }
-    }
-
-    public async Task<PlayerToken?> ExchangeForPlayerTokenAsync(string keycloakUsername, string status, CancellationToken cancellationToken = default)
-    {
-        if (status != "active")
-        {
-            return null;
-        }
-
-        var ownToken = await GetOwnTokenAsync(cancellationToken);
-
-        var token = await RequestTokenAsync(
-            [
-                new("client_id", _options.ClientId),
-                new("client_secret", _options.ClientSecret),
-                new("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange"),
-                new("subject_token", ownToken),
-                new("subject_token_type", "urn:ietf:params:oauth:token-type:access_token"),
-                new("requested_subject", keycloakUsername),
-            ],
-            cancellationToken);
-
-        var jti = new JwtSecurityTokenHandler().ReadJwtToken(token.AccessToken).Id;
-
-        return new PlayerToken(token.AccessToken, jti, token.ExpiresInSeconds);
     }
 
     private async Task<KeycloakTokenResponse> RequestTokenAsync(KeyValuePair<string, string>[] form, CancellationToken cancellationToken)
