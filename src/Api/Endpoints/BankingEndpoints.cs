@@ -1,7 +1,7 @@
 using ELifeRPG.Bridge.Api.Extensions;
-using ELifeRPG.Bridge.ApiClient;
+using ELifeRPG.BackendApiClient;
 using Microsoft.Kiota.Abstractions.Serialization;
-using ApiModels = ELifeRPG.Bridge.ApiClient.Models;
+using ApiModels = ELifeRPG.BackendApiClient.Models;
 
 namespace ELifeRPG.Bridge.Api.Endpoints;
 

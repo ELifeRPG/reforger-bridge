@@ -1,7 +1,7 @@
 using ELifeRPG.Bridge.Api.Authentication;
 using ELifeRPG.Bridge.Api.Services;
-using ELifeRPG.Bridge.ApiClient;
-using ApiModels = ELifeRPG.Bridge.ApiClient.Models;
+using ELifeRPG.BackendApiClient;
+using ApiModels = ELifeRPG.BackendApiClient.Models;
 
 namespace ELifeRPG.Bridge.Api.Endpoints;
 
