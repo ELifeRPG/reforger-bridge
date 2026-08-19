@@ -1,3 +1,4 @@
+using ELifeRPG.Bridge.Api.Services;
 using ELifeRPG.BackendApiClient;
 using ApiModels = ELifeRPG.BackendApiClient.Models;
 
@@ -10,14 +11,23 @@ public static class CharacterEndpoints
         var group = app.MapGroup("").WithTags("Character");
 
         group.MapPost("characters", async (
-                ApiModels.CreateCharacterRequestDto request,
+                CreateCharacterRequest request,
                 EliferpgApiClient apiClient,
+                PlayerSessionTracker sessions,
                 CancellationToken cancellationToken) =>
             {
+                var resolution = sessions.ResolveAccountId(request.BohemiaId);
+                if (resolution.Error is not null)
+                {
+                    return resolution.Error;
+                }
+
                 ApiModels.CharacterDto? character;
                 try
                 {
-                    character = await apiClient.Api.Characters.PostAsync(request, cancellationToken: cancellationToken);
+                    character = await apiClient.Api.Characters.PostAsync(
+                        new ApiModels.CreateCharacterRequestDto { AccountId = resolution.AccountId, Name = request.Name },
+                        cancellationToken: cancellationToken);
                 }
                 catch (ApiModels.ProblemDetails problem)
                 {
@@ -29,22 +39,31 @@ public static class CharacterEndpoints
                     : Results.Ok(CharacterSummary.Create(character));
             })
             .WithName("CreateCharacter")
-            .WithDescription("Creates a new character for an account.");
+            .WithDescription("Creates a new character for the connected player.");
 
-        group.MapGet("accounts/{accountId:guid}/characters", async (
-                Guid accountId,
+        group.MapGet("characters", async (
+                Guid bohemiaId,
                 EliferpgApiClient apiClient,
+                PlayerSessionTracker sessions,
                 CancellationToken cancellationToken) =>
             {
-                var characters = await apiClient.Api.Accounts[accountId].Characters.GetAsync(cancellationToken: cancellationToken);
+                var resolution = sessions.ResolveAccountId(bohemiaId);
+                if (resolution.Error is not null)
+                {
+                    return resolution.Error;
+                }
+
+                var characters = await apiClient.Api.Accounts[resolution.AccountId!.Value].Characters.GetAsync(cancellationToken: cancellationToken);
                 return Results.Ok(characters?.Select(CharacterSummary.Create).ToList() ?? []);
             })
-            .WithName("ListAccountCharacters")
-            .WithDescription("Lists characters for an account.");
+            .WithName("ListCharacters")
+            .WithDescription("Lists the connected player's characters.");
 
         return app;
     }
 }
+
+public sealed record CreateCharacterRequest(Guid BohemiaId, string Name);
 
 public sealed record CharacterSummary(
     Guid CharacterId,
