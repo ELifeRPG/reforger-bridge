@@ -64,7 +64,6 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.MapAccountEndpoints();
 app.MapSessionEndpoints();
 app.MapBankingEndpoints();
 app.MapCharacterEndpoints();

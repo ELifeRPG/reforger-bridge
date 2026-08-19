@@ -5,8 +5,9 @@ icon: lucide/workflow
 # Workflows
 
 Four calls from the game (via the mod) into the Bridge drive everything described here. Each
-results in a call onward to the Central API, to Keycloak, or both. A fifth, Bridge-local-only
-lookup (account resolution) rounds out the set.
+results in a call onward to the Central API, to Keycloak, or both. The mod only ever supplies a
+player's Bohemia ID — the Bridge resolves `AccountId` internally wherever it's needed (from the
+session established by `player-connected`), so the mod never has to know or pass it around itself.
 
 ## Player connects
 
@@ -34,16 +35,12 @@ API.
 `AccountId` from their already-tracked Bridge session (so this works even for a not-yet-whitelisted
 player, who has a session but no token) and forwards the application to the Central API.
 
-## Resolving an account from a Bohemia ID
-
-`GET account-info/{bohemiaId}` — looks up the `AccountId` for a currently-connected player from
-the Bridge-local session, `404` if that Bohemia ID has no active session. Exists because the
-Reforger server only ever knows a player's Bohemia ID, never their `AccountId`.
-
 ## Proxy endpoints
 
 Everything else (Banking, Characters, Companies) is a thin proxy onto the Central API, using
 request/response shapes local to the Bridge rather than the Central API's own Kiota-generated
-types, to keep the mod-facing contract independent of client-generation details. These aren't
-documented page-by-page here — see `/docs` (Scalar UI, dev-only) or `/openapi/v1.json` on a running
-Bridge instance for the current, always-accurate route list.
+types, to keep the mod-facing contract independent of client-generation details. Character
+endpoints in particular take a `bohemiaId`, not an `AccountId` — same resolution-from-session
+pattern as `submit-whitelist-application` above. These aren't documented page-by-page here — see
+`/docs` (Scalar UI, dev-only) or `/openapi/v1.json` on a running Bridge instance for the current,
+always-accurate route list.
