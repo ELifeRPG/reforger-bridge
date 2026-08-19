@@ -15,21 +15,13 @@ public static class CompanyEndpoints
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                ApiModels.CompanyDto? company;
-                try
-                {
-                    company = await apiClient.Api.Companies.PostAsync(
+                return await ApiCallExtensions.ExecuteAsync(
+                    () => apiClient.Api.Companies.PostAsync(
                         new ApiModels.CreateCompanyRequestDto { Name = request.Name, FounderCharacterId = request.FounderCharacterId },
-                        cancellationToken: cancellationToken);
-                }
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
-
-                return company is null
-                    ? Results.Problem("Central API returned an empty company response.")
-                    : Results.Ok(CompanySummary.Create(company));
+                        cancellationToken: cancellationToken),
+                    company => company is null
+                        ? Results.Problem("Central API returned an empty company response.")
+                        : Results.Ok(CompanySummary.Create(company)));
             })
             .WithName("CreateCompany")
             .WithDescription("Creates a new company; the founder becomes its first member.");
@@ -47,19 +39,11 @@ public static class CompanyEndpoints
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                ApiModels.CompanyDetailsDto? company;
-                try
-                {
-                    company = await apiClient.Api.Companies[companyId].GetAsync(cancellationToken: cancellationToken);
-                }
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
-
-                return company is null
-                    ? Results.NotFound()
-                    : Results.Ok(CompanyDetails.Create(company));
+                return await ApiCallExtensions.ExecuteAsync(
+                    () => apiClient.Api.Companies[companyId].GetAsync(cancellationToken: cancellationToken),
+                    company => company is null
+                        ? Results.NotFound()
+                        : Results.Ok(CompanyDetails.Create(company)));
             })
             .WithName("GetCompany")
             .WithDescription("Gets company details, including its members.");
@@ -70,18 +54,15 @@ public static class CompanyEndpoints
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                try
-                {
-                    await apiClient.Api.Companies[companyId].Members.PostAsync(
-                        new ApiModels.AddMemberRequestDto { CharacterId = request.CharacterId },
-                        cancellationToken: cancellationToken);
-                }
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
-
-                return Results.Ok();
+                return await ApiCallExtensions.ExecuteAsync(
+                    async () =>
+                    {
+                        await apiClient.Api.Companies[companyId].Members.PostAsync(
+                            new ApiModels.AddMemberRequestDto { CharacterId = request.CharacterId },
+                            cancellationToken: cancellationToken);
+                        return (object?)null;
+                    },
+                    _ => Results.Ok());
             })
             .WithName("AddCompanyMember")
             .WithDescription("Adds a character as a member of a company.");
@@ -92,21 +73,13 @@ public static class CompanyEndpoints
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                ApiModels.CompanyApplicationDto? application;
-                try
-                {
-                    application = await apiClient.Api.Companies[companyId].Applications.PostAsync(
+                return await ApiCallExtensions.ExecuteAsync(
+                    () => apiClient.Api.Companies[companyId].Applications.PostAsync(
                         new ApiModels.SubmitApplicationRequestDto { CharacterId = request.CharacterId, Message = request.Message },
-                        cancellationToken: cancellationToken);
-                }
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
-
-                return application is null
-                    ? Results.Problem("Central API returned an empty application response.")
-                    : Results.Ok(CompanyApplicationSummary.Create(application));
+                        cancellationToken: cancellationToken),
+                    application => application is null
+                        ? Results.Problem("Central API returned an empty application response.")
+                        : Results.Ok(CompanyApplicationSummary.Create(application)));
             })
             .WithName("SubmitCompanyApplication")
             .WithDescription("Submits a character's application to join a company.");
@@ -117,19 +90,11 @@ public static class CompanyEndpoints
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                List<ApiModels.CompanyApplicationDto>? applications;
-                try
-                {
-                    applications = await apiClient.Api.Companies[companyId].Applications.GetAsync(
+                return await ApiCallExtensions.ExecuteAsync(
+                    () => apiClient.Api.Companies[companyId].Applications.GetAsync(
                         config => config.QueryParameters.ActingCharacterId = actingCharacterId,
-                        cancellationToken: cancellationToken);
-                }
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
-
-                return Results.Ok(applications?.Select(CompanyApplicationSummary.Create).ToList() ?? []);
+                        cancellationToken: cancellationToken),
+                    applications => Results.Ok(applications?.Select(CompanyApplicationSummary.Create).ToList() ?? []));
             })
             .WithName("ListCompanyApplications")
             .WithDescription("Lists a company's applications. Requires ManageMembers permission in the company.");
@@ -141,18 +106,15 @@ public static class CompanyEndpoints
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                try
-                {
-                    await apiClient.Api.Companies[companyId].Applications[applicationId].Confirm.PutAsync(
-                        new ApiModels.ActingCharacterRequestDto { ActingCharacterId = request.ActingCharacterId },
-                        cancellationToken: cancellationToken);
-                }
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
-
-                return Results.Ok();
+                return await ApiCallExtensions.ExecuteAsync(
+                    async () =>
+                    {
+                        await apiClient.Api.Companies[companyId].Applications[applicationId].Confirm.PutAsync(
+                            new ApiModels.ActingCharacterRequestDto { ActingCharacterId = request.ActingCharacterId },
+                            cancellationToken: cancellationToken);
+                        return (object?)null;
+                    },
+                    _ => Results.Ok());
             })
             .WithName("ConfirmCompanyApplication")
             .WithDescription("Marks a pending application as InProgress. Requires ManageMembers permission in the company.");
@@ -164,18 +126,15 @@ public static class CompanyEndpoints
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                try
-                {
-                    await apiClient.Api.Companies[companyId].Applications[applicationId].Accept.PutAsync(
-                        new ApiModels.ActingCharacterRequestDto { ActingCharacterId = request.ActingCharacterId },
-                        cancellationToken: cancellationToken);
-                }
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
-
-                return Results.Ok();
+                return await ApiCallExtensions.ExecuteAsync(
+                    async () =>
+                    {
+                        await apiClient.Api.Companies[companyId].Applications[applicationId].Accept.PutAsync(
+                            new ApiModels.ActingCharacterRequestDto { ActingCharacterId = request.ActingCharacterId },
+                            cancellationToken: cancellationToken);
+                        return (object?)null;
+                    },
+                    _ => Results.Ok());
             })
             .WithName("AcceptCompanyApplication")
             .WithDescription("Accepts an application, adding the character as a member in the company's default position. Requires ManageMembers permission in the company.");
@@ -187,18 +146,15 @@ public static class CompanyEndpoints
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                try
-                {
-                    await apiClient.Api.Companies[companyId].Applications[applicationId].Deny.PutAsync(
-                        new ApiModels.ActingCharacterRequestDto { ActingCharacterId = request.ActingCharacterId },
-                        cancellationToken: cancellationToken);
-                }
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
-
-                return Results.Ok();
+                return await ApiCallExtensions.ExecuteAsync(
+                    async () =>
+                    {
+                        await apiClient.Api.Companies[companyId].Applications[applicationId].Deny.PutAsync(
+                            new ApiModels.ActingCharacterRequestDto { ActingCharacterId = request.ActingCharacterId },
+                            cancellationToken: cancellationToken);
+                        return (object?)null;
+                    },
+                    _ => Results.Ok());
             })
             .WithName("DenyCompanyApplication")
             .WithDescription("Denies an application. Requires ManageMembers permission in the company.");

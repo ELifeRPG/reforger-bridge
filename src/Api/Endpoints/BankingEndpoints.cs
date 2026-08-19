@@ -46,19 +46,11 @@ public static class BankingEndpoints
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                ApiModels.BankAccountDto? account;
-                try
-                {
-                    account = await apiClient.Api.Banks[bankId].Accounts.PostAsync(request, cancellationToken: cancellationToken);
-                }
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
-
-                return account is null
-                    ? Results.Problem("Central API returned an empty bank account response.")
-                    : Results.Ok(BankAccountSummary.Create(account));
+                return await ApiCallExtensions.ExecuteAsync(
+                    () => apiClient.Api.Banks[bankId].Accounts.PostAsync(request, cancellationToken: cancellationToken),
+                    account => account is null
+                        ? Results.Problem("Central API returned an empty bank account response.")
+                        : Results.Ok(BankAccountSummary.Create(account)));
             })
             .WithName("OpenBankAccount")
             .WithDescription("Opens a bank account for a character (Personal) or a company (Corporate) — provide exactly one of characterId/companyId.");
@@ -90,19 +82,11 @@ public static class BankingEndpoints
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                ApiModels.BankAccountDto? account;
-                try
-                {
-                    account = await apiClient.Api.BankAccounts[bankAccountId].GetAsync(cancellationToken: cancellationToken);
-                }
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
-
-                return account is null
-                    ? Results.NotFound()
-                    : Results.Ok(BankAccountSummary.Create(account));
+                return await ApiCallExtensions.ExecuteAsync(
+                    () => apiClient.Api.BankAccounts[bankAccountId].GetAsync(cancellationToken: cancellationToken),
+                    account => account is null
+                        ? Results.NotFound()
+                        : Results.Ok(BankAccountSummary.Create(account)));
             })
             .WithName("GetBankAccount")
             .WithDescription("Gets bank account details.");
@@ -112,17 +96,9 @@ public static class BankingEndpoints
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                List<ApiModels.BankAccountTransactionDto>? transactions;
-                try
-                {
-                    transactions = await apiClient.Api.BankAccounts[bankAccountId].Transactions.GetAsync(cancellationToken: cancellationToken);
-                }
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
-
-                return Results.Ok(transactions?.Select(BankAccountTransaction.Create).ToList() ?? []);
+                return await ApiCallExtensions.ExecuteAsync(
+                    () => apiClient.Api.BankAccounts[bankAccountId].Transactions.GetAsync(cancellationToken: cancellationToken),
+                    transactions => Results.Ok(transactions?.Select(BankAccountTransaction.Create).ToList() ?? []));
             })
             .WithName("ListBankAccountTransactions")
             .WithDescription("Lists a bank account's most recent transactions (deposits, withdrawals, transfers), newest first.");
@@ -133,21 +109,13 @@ public static class BankingEndpoints
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                ApiModels.TransactionResultDto? result;
-                try
-                {
-                    result = await apiClient.Api.BankAccounts[bankAccountId].Deposit.PutAsync(
+                return await ApiCallExtensions.ExecuteAsync(
+                    () => apiClient.Api.BankAccounts[bankAccountId].Deposit.PutAsync(
                         new ApiModels.DepositRequestDto { Amount = new UntypedDecimal(request.Amount) },
-                        cancellationToken: cancellationToken);
-                }
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
-
-                return result is null
-                    ? Results.Problem("Central API returned an empty deposit response.")
-                    : Results.Ok(TransactionResult.Create(result));
+                        cancellationToken: cancellationToken),
+                    result => result is null
+                        ? Results.Problem("Central API returned an empty deposit response.")
+                        : Results.Ok(TransactionResult.Create(result)));
             })
             .WithName("DepositToBankAccount")
             .WithDescription("Deposits cash into a bank account.");
@@ -158,21 +126,13 @@ public static class BankingEndpoints
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                ApiModels.TransactionResultDto? result;
-                try
-                {
-                    result = await apiClient.Api.BankAccounts[bankAccountId].Withdraw.PutAsync(
+                return await ApiCallExtensions.ExecuteAsync(
+                    () => apiClient.Api.BankAccounts[bankAccountId].Withdraw.PutAsync(
                         new ApiModels.WithdrawRequestDto { Amount = new UntypedDecimal(request.Amount), CharacterId = request.CharacterId },
-                        cancellationToken: cancellationToken);
-                }
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
-
-                return result is null
-                    ? Results.Problem("Central API returned an empty withdraw response.")
-                    : Results.Ok(TransactionResult.Create(result));
+                        cancellationToken: cancellationToken),
+                    result => result is null
+                        ? Results.Problem("Central API returned an empty withdraw response.")
+                        : Results.Ok(TransactionResult.Create(result)));
             })
             .WithName("WithdrawFromBankAccount")
             .WithDescription("Withdraws cash from a bank account, e.g. for an ATM.");
@@ -183,26 +143,18 @@ public static class BankingEndpoints
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                ApiModels.TransactionResultDto? result;
-                try
-                {
-                    result = await apiClient.Api.BankAccounts[bankAccountId].Transaction.PutAsync(
+                return await ApiCallExtensions.ExecuteAsync(
+                    () => apiClient.Api.BankAccounts[bankAccountId].Transaction.PutAsync(
                         new ApiModels.TransferRequestDto
                         {
                             Amount = new UntypedDecimal(request.Amount),
                             CharacterId = request.CharacterId,
                             TargetBankAccountId = request.TargetBankAccountId,
                         },
-                        cancellationToken: cancellationToken);
-                }
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
-
-                return result is null
-                    ? Results.Problem("Central API returned an empty transfer response.")
-                    : Results.Ok(TransactionResult.Create(result));
+                        cancellationToken: cancellationToken),
+                    result => result is null
+                        ? Results.Problem("Central API returned an empty transfer response.")
+                        : Results.Ok(TransactionResult.Create(result)));
             })
             .WithName("TransferBankAccountFunds")
             .WithDescription("Transfers cash to another bank account.");

@@ -1,4 +1,5 @@
 using ELifeRPG.Bridge.Api.Authentication;
+using ELifeRPG.Bridge.Api.Extensions;
 using ELifeRPG.Bridge.Api.Services;
 using ELifeRPG.BackendApiClient;
 using ApiModels = ELifeRPG.BackendApiClient.Models;
@@ -18,22 +19,9 @@ public static class SessionEndpoints
                 PlayerSessionTracker sessions,
                 CancellationToken cancellationToken) =>
             {
-                ApiModels.SessionDto? session;
-                try
-                {
-                    session = await apiClient.Api.Accounts.SessionBootstrap.PostAsync(
-                        new ApiModels.CreateSessionRequestDto { BohemiaId = request.BohemiaId },
-                        cancellationToken: cancellationToken);
-                }
-                // session-bootstrap no longer declares an error response (it always returns 200 with
-                // a Status field instead of erroring — see Accounts.Api's session-bootstrap endpoint),
-                // so Kiota emits no error mapping for this call and this catch can no longer fire in
-                // practice. Left in place — harmless, and matches the identical catch shape below for
-                // character-selected/player-disconnected, which still do have live error mappings.
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
+                var session = await apiClient.Api.Accounts.SessionBootstrap.PostAsync(
+                    new ApiModels.CreateSessionRequestDto { BohemiaId = request.BohemiaId },
+                    cancellationToken: cancellationToken);
 
                 if (session is null)
                 {
@@ -73,18 +61,17 @@ public static class SessionEndpoints
                 PlayerSessionTracker sessions,
                 CancellationToken cancellationToken) =>
             {
-                try
-                {
-                    await apiClient.Api.Characters[request.CharacterId].Sessions.PostAsync(cancellationToken: cancellationToken);
-                }
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
-
-                sessions.SetActiveCharacter(request.BohemiaId, request.CharacterId);
-
-                return Results.Ok();
+                return await ApiCallExtensions.ExecuteAsync(
+                    async () =>
+                    {
+                        await apiClient.Api.Characters[request.CharacterId].Sessions.PostAsync(cancellationToken: cancellationToken);
+                        return (object?)null;
+                    },
+                    _ =>
+                    {
+                        sessions.SetActiveCharacter(request.BohemiaId, request.CharacterId);
+                        return Results.Ok();
+                    });
             })
             .WithName("CharacterSelected")
             .WithDescription("Call when a player picks a character at the in-game character-select screen (a separate, later moment than PlayerConnected). Starts that character's session.");
@@ -118,14 +105,13 @@ public static class SessionEndpoints
 
                 if (session?.ActiveCharacterId is { } characterId)
                 {
-                    try
-                    {
-                        await apiClient.Api.Characters[characterId].Sessions.DeleteAsync(cancellationToken: cancellationToken);
-                    }
-                    catch (ApiModels.ProblemDetails problem)
-                    {
-                        return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                    }
+                    return await ApiCallExtensions.ExecuteAsync(
+                        async () =>
+                        {
+                            await apiClient.Api.Characters[characterId].Sessions.DeleteAsync(cancellationToken: cancellationToken);
+                            return (object?)null;
+                        },
+                        _ => Results.Ok());
                 }
 
                 return Results.Ok();

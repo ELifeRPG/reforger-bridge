@@ -1,6 +1,7 @@
 using ELifeRPG.BackendApiClient;
 using ApiModels = ELifeRPG.BackendApiClient.Models;
 
+using ELifeRPG.Bridge.Api.Extensions;
 using ELifeRPG.Bridge.Api.Services;
 
 namespace ELifeRPG.Bridge.Api.Endpoints;
@@ -23,21 +24,15 @@ public static class WhitelistEndpoints
                     return Results.Problem("No active session for this Bohemia ID.", statusCode: StatusCodes.Status404NotFound);
                 }
 
-                try
-                {
-                    var result = await apiClient.Api.WhitelistApplications.PostAsync(
+                return await ApiCallExtensions.ExecuteAsync(
+                    () => apiClient.Api.WhitelistApplications.PostAsync(
                         new ApiModels.SubmitWhitelistApplicationRequestDto
                         {
                             AccountId = session.AccountId,
                             ApplicationText = request.ApplicationText,
                         },
-                        cancellationToken: cancellationToken);
-                    return Results.Ok(result);
-                }
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
+                        cancellationToken: cancellationToken),
+                    result => Results.Ok(result));
             })
             .WithName("SubmitWhitelistApplication")
             .WithDescription("Submits the connected player's whitelist application for this server.");

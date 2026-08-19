@@ -1,3 +1,4 @@
+using ELifeRPG.Bridge.Api.Extensions;
 using ELifeRPG.Bridge.Api.Services;
 using ELifeRPG.BackendApiClient;
 using ApiModels = ELifeRPG.BackendApiClient.Models;
@@ -22,21 +23,13 @@ public static class CharacterEndpoints
                     return resolution.Error;
                 }
 
-                ApiModels.CharacterDto? character;
-                try
-                {
-                    character = await apiClient.Api.Characters.PostAsync(
+                return await ApiCallExtensions.ExecuteAsync(
+                    () => apiClient.Api.Characters.PostAsync(
                         new ApiModels.CreateCharacterRequestDto { AccountId = resolution.AccountId, Name = request.Name },
-                        cancellationToken: cancellationToken);
-                }
-                catch (ApiModels.ProblemDetails problem)
-                {
-                    return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
-                }
-
-                return character is null
-                    ? Results.Problem("Central API returned an empty character response.")
-                    : Results.Ok(CharacterSummary.Create(character));
+                        cancellationToken: cancellationToken),
+                    character => character is null
+                        ? Results.Problem("Central API returned an empty character response.")
+                        : Results.Ok(CharacterSummary.Create(character)));
             })
             .WithName("CreateCharacter")
             .WithDescription("Creates a new character for the connected player.");
