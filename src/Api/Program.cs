@@ -3,6 +3,7 @@ using ELifeRPG.Bridge.Api.Authentication;
 using ELifeRPG.Bridge.Api.Configuration;
 using ELifeRPG.Bridge.Api.Endpoints;
 using ELifeRPG.Bridge.Api.OpenApi;
+using ELifeRPG.Bridge.Api.Serialization;
 using ELifeRPG.Bridge.Api.Services;
 using Microsoft.Kiota.Abstractions.Authentication;
 using Microsoft.Kiota.Http.HttpClientLibrary;
@@ -50,6 +51,10 @@ builder.Services.AddSingleton<EliferpgApiClient>(serviceProvider =>
 
 builder.Services.AddSingleton<PlayerSessionTracker>();
 
+// Results.Ok<T> serializes through these, not through Program-level defaults — see BridgeJsonOptions
+// for why a status must not reach the mod as an integer.
+builder.Services.ConfigureHttpJsonOptions(options => BridgeJsonOptions.Configure(options.SerializerOptions));
+
 builder.Services.AddOpenApi("v1", options => options.AddSchemaTransformer<EnumSchemaTransformer>());
 
 var app = builder.Build();
@@ -68,6 +73,8 @@ app.MapSessionEndpoints();
 app.MapBankingEndpoints();
 app.MapCharacterEndpoints();
 app.MapCompanyEndpoints();
-app.MapWhitelistEndpoints();
+app.MapPhoneEndpoints();
+app.MapPhoneContactEndpoints();
+app.MapPhoneMessageEndpoints();
 
 app.Run();

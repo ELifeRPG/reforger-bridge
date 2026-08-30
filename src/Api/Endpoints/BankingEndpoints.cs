@@ -29,6 +29,7 @@ public static class BankingEndpoints
                     ? Results.Problem("Central API returned an empty bank response.")
                     : Results.Ok(BankSummary.Create(bank));
             })
+            .Produces<BankSummary>()
             .WithName("OpenBank")
             .WithDescription("Opens a new bank.");
 
@@ -37,6 +38,7 @@ public static class BankingEndpoints
                 var banks = await apiClient.Api.Banks.GetAsync(cancellationToken: cancellationToken);
                 return Results.Ok(banks?.Select(BankSummary.Create).ToList() ?? []);
             })
+            .Produces<IEnumerable<BankSummary>>()
             .WithName("ListBanks")
             .WithDescription("Lists banks.");
 
@@ -52,6 +54,9 @@ public static class BankingEndpoints
                         ? Results.Problem("Central API returned an empty bank account response.")
                         : Results.Ok(BankAccountSummary.Create(account)));
             })
+            .Produces<BankAccountSummary>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
             .WithName("OpenBankAccount")
             .WithDescription("Opens a bank account for a character (Personal) or a company (Corporate) — provide exactly one of characterId/companyId.");
 
@@ -63,6 +68,7 @@ public static class BankingEndpoints
                 var accounts = await apiClient.Api.Characters[characterId].BankAccounts.GetAsync(cancellationToken: cancellationToken);
                 return Results.Ok(accounts?.Select(BankAccountSummary.Create).ToList() ?? []);
             })
+            .Produces<IEnumerable<BankAccountSummary>>()
             .WithName("ListCharacterBankAccounts")
             .WithDescription("Lists a character's personal bank accounts.");
 
@@ -74,6 +80,7 @@ public static class BankingEndpoints
                 var accounts = await apiClient.Api.Companies[companyId].BankAccounts.GetAsync(cancellationToken: cancellationToken);
                 return Results.Ok(accounts?.Select(BankAccountSummary.Create).ToList() ?? []);
             })
+            .Produces<IEnumerable<BankAccountSummary>>()
             .WithName("ListCompanyBankAccounts")
             .WithDescription("Lists a company's corporate bank accounts.");
 
@@ -88,6 +95,8 @@ public static class BankingEndpoints
                         ? Results.NotFound()
                         : Results.Ok(BankAccountSummary.Create(account)));
             })
+            .Produces<BankAccountSummary>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
             .WithName("GetBankAccount")
             .WithDescription("Gets bank account details.");
 
@@ -100,6 +109,8 @@ public static class BankingEndpoints
                     () => apiClient.Api.BankAccounts[bankAccountId].Transactions.GetAsync(cancellationToken: cancellationToken),
                     transactions => Results.Ok(transactions?.Select(BankAccountTransaction.Create).ToList() ?? []));
             })
+            .Produces<IEnumerable<BankAccountTransaction>>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
             .WithName("ListBankAccountTransactions")
             .WithDescription("Lists a bank account's most recent transactions (deposits, withdrawals, transfers), newest first.");
 
@@ -117,6 +128,9 @@ public static class BankingEndpoints
                         ? Results.Problem("Central API returned an empty deposit response.")
                         : Results.Ok(TransactionResult.Create(result)));
             })
+            .Produces<TransactionResult>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
             .WithName("DepositToBankAccount")
             .WithDescription("Deposits cash into a bank account.");
 
@@ -134,6 +148,10 @@ public static class BankingEndpoints
                         ? Results.Problem("Central API returned an empty withdraw response.")
                         : Results.Ok(TransactionResult.Create(result)));
             })
+            .Produces<TransactionResult>()
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
             .WithName("WithdrawFromBankAccount")
             .WithDescription("Withdraws cash from a bank account, e.g. for an ATM.");
 
@@ -156,6 +174,10 @@ public static class BankingEndpoints
                         ? Results.Problem("Central API returned an empty transfer response.")
                         : Results.Ok(TransactionResult.Create(result)));
             })
+            .Produces<TransactionResult>()
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
             .WithName("TransferBankAccountFunds")
             .WithDescription("Transfers cash to another bank account.");
 

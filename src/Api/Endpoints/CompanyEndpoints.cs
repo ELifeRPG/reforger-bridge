@@ -23,6 +23,9 @@ public static class CompanyEndpoints
                         ? Results.Problem("Central API returned an empty company response.")
                         : Results.Ok(CompanySummary.Create(company)));
             })
+            .Produces<CompanySummary>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
             .WithName("CreateCompany")
             .WithDescription("Creates a new company; the founder becomes its first member.");
 
@@ -31,6 +34,7 @@ public static class CompanyEndpoints
                 var companies = await apiClient.Api.Companies.GetAsync(cancellationToken: cancellationToken);
                 return Results.Ok(companies?.Select(CompanySummary.Create).ToList() ?? []);
             })
+            .Produces<IEnumerable<CompanySummary>>()
             .WithName("ListCompanies")
             .WithDescription("Lists companies.");
 
@@ -45,6 +49,8 @@ public static class CompanyEndpoints
                         ? Results.NotFound()
                         : Results.Ok(CompanyDetails.Create(company)));
             })
+            .Produces<CompanyDetails>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
             .WithName("GetCompany")
             .WithDescription("Gets company details, including its members.");
 
@@ -64,6 +70,9 @@ public static class CompanyEndpoints
                     },
                     _ => Results.Ok());
             })
+            .Produces(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
             .WithName("AddCompanyMember")
             .WithDescription("Adds a character as a member of a company.");
 
@@ -81,6 +90,10 @@ public static class CompanyEndpoints
                         ? Results.Problem("Central API returned an empty application response.")
                         : Results.Ok(CompanyApplicationSummary.Create(application)));
             })
+            .Produces<CompanyApplicationSummary>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
             .WithName("SubmitCompanyApplication")
             .WithDescription("Submits a character's application to join a company.");
 
@@ -96,6 +109,9 @@ public static class CompanyEndpoints
                         cancellationToken: cancellationToken),
                     applications => Results.Ok(applications?.Select(CompanyApplicationSummary.Create).ToList() ?? []));
             })
+            .Produces<IEnumerable<CompanyApplicationSummary>>()
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
             .WithName("ListCompanyApplications")
             .WithDescription("Lists a company's applications. Requires ManageMembers permission in the company.");
 
@@ -116,6 +132,10 @@ public static class CompanyEndpoints
                     },
                     _ => Results.Ok());
             })
+            .Produces(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
             .WithName("ConfirmCompanyApplication")
             .WithDescription("Marks a pending application as InProgress. Requires ManageMembers permission in the company.");
 
@@ -136,6 +156,10 @@ public static class CompanyEndpoints
                     },
                     _ => Results.Ok());
             })
+            .Produces(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
             .WithName("AcceptCompanyApplication")
             .WithDescription("Accepts an application, adding the character as a member in the company's default position. Requires ManageMembers permission in the company.");
 
@@ -156,6 +180,10 @@ public static class CompanyEndpoints
                     },
                     _ => Results.Ok());
             })
+            .Produces(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
             .WithName("DenyCompanyApplication")
             .WithDescription("Denies an application. Requires ManageMembers permission in the company.");
 
@@ -186,13 +214,41 @@ public sealed record CompanyDetails(Guid CompanyId, string Name, List<CompanyMem
         source.Members?.Select(CompanyMember.Create).ToList() ?? []);
 }
 
-public sealed record CompanyApplicationSummary(Guid ApplicationId, Guid CharacterId, string Message, string Status)
+public sealed record CompanyApplicationSummary(
+    Guid ApplicationId,
+    Guid CharacterId,
+    string Message,
+    CompanyApplicationStatus Status)
 {
     public static CompanyApplicationSummary Create(ApiModels.CompanyApplicationDto source) => new(
         source.ApplicationId!.Value,
         source.CharacterId!.Value,
         source.Message!,
-        source.Status!);
+        FromCentralApi(source.Status));
+
+    private static CompanyApplicationStatus FromCentralApi(string? status) => status switch
+    {
+        "Pending" => CompanyApplicationStatus.Pending,
+        "InProgress" => CompanyApplicationStatus.InProgress,
+        "Accepted" => CompanyApplicationStatus.Accepted,
+        "Denied" => CompanyApplicationStatus.Denied,
+        _ => CompanyApplicationStatus.Unknown,
+    };
+}
+
+/// <summary>Where an application sits. Member names match the strings Core emits.</summary>
+public enum CompanyApplicationStatus
+{
+    /// <summary>Core sent a status this build does not know. See PlayerSessionStatus.Unknown.</summary>
+    Unknown = 0,
+
+    Pending,
+
+    InProgress,
+
+    Accepted,
+
+    Denied,
 }
 
 public sealed record CreateCompanyRequest(string Name, Guid FounderCharacterId);

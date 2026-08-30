@@ -36,8 +36,14 @@ curl -X POST http://localhost:5200/player-connected \
 This exercises the full chain: Bridge → Central API (creates the account + a real Keycloak user,
 if new). It also records, Bridge-locally (`PlayerSessionTracker`, in-memory, lost on Bridge
 restart), that this Bohemia ID is connected and which `AccountId` it maps to — every other
-mod-facing endpoint that needs an `AccountId` (character listing/creation, whitelist application)
-resolves it from this tracked session rather than requiring the mod to know or pass it around.
+mod-facing endpoint that needs an `AccountId` (character listing and creation) resolves it from
+this tracked session rather than requiring the mod to know or pass it around.
+
+Whitelist applications are **not** submitted through the Bridge. The Central API derives the
+account from the caller's own Keycloak subject (`account:self:manage`), which a gameserver's
+client-credentials token does not carry — accepting an `accountId` there previously let any holder
+of the gameserver whitelist scope apply on someone else's behalf, and that was deliberately closed.
+Players apply through the web portal instead, before or after ever joining the gameserver.
 
 If the account is blocked, `player-connected` still returns `200`, but with `"status": "blocked"`
 and no Bridge-local session recorded.

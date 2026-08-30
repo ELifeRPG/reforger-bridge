@@ -31,6 +31,9 @@ public static class CharacterEndpoints
                         ? Results.Problem("Central API returned an empty character response.")
                         : Results.Ok(CharacterSummary.Create(character)));
             })
+            .Produces<CharacterSummary>()
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
             .WithName("CreateCharacter")
             .WithDescription("Creates a new character for the connected player.");
 
@@ -49,6 +52,8 @@ public static class CharacterEndpoints
                 var characters = await apiClient.Api.Accounts[resolution.AccountId!.Value].Characters.GetAsync(cancellationToken: cancellationToken);
                 return Results.Ok(characters?.Select(CharacterSummary.Create).ToList() ?? []);
             })
+            .Produces<IEnumerable<CharacterSummary>>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
             .WithName("ListCharacters")
             .WithDescription("Lists the connected player's characters.");
 
@@ -58,17 +63,14 @@ public static class CharacterEndpoints
 
 public sealed record CreateCharacterRequest(Guid BohemiaId, string Name);
 
-public sealed record CharacterSummary(
-    Guid CharacterId,
-    string Name,
-    bool SessionActive,
-    DateTimeOffset? SessionStartedAt,
-    DateTimeOffset? SessionEndedAt)
+/// <summary>
+/// What the character-select screen needs, and nothing else. Core's CharacterDto also carries
+/// SessionActive/SessionStartedAt/SessionEndedAt; the mod has no use for them, and it does not need
+/// them to recover from a session left open by a crash — Core's StartSession is deliberately tolerant
+/// of being called again on an already-active character (see PlayerSessionTracker).
+/// </summary>
+public sealed record CharacterSummary(Guid CharacterId, string Name)
 {
-    public static CharacterSummary Create(ApiModels.CharacterDto source) => new(
-        source.CharacterId!.Value,
-        source.Name!,
-        source.SessionActive ?? false,
-        source.SessionStartedAt,
-        source.SessionEndedAt);
+    public static CharacterSummary Create(ApiModels.CharacterDto source) =>
+        new(source.CharacterId!.Value, source.Name!);
 }
