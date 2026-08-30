@@ -9,3 +9,4 @@ services:
     volumes:
       - "../:/workspace:cached"
       - "${HOME}/.gitconfig:/home/vscode/.gitconfig:ro"
+      - "${HOME}${USERPROFILE}/.nuget:/home/vscode/.nuget"
