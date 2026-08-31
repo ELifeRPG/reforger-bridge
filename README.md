@@ -78,10 +78,22 @@ This repo no longer generates its own Kiota client. `src/Api` references the
 package (published to GitHub Packages) instead of an in-solution `ApiClient` project — the client
 is generated and versioned centrally there, against `eliferpg-core`'s OpenAPI spec.
 
-`NuGet.config` at the repo root adds the `eliferpg-github` package source. Restoring requires a
-GitHub PAT with `read:packages`, supplied via the `GITHUB_PACKAGES_USERNAME`/
-`GITHUB_PACKAGES_TOKEN` environment variables (or set them as NuGet config values through
-whatever secret store the devcontainer/CI environment uses).
+`NuGet.config` at the repo root declares the `eliferpg-github` package source but deliberately
+carries **no credentials** — they live in your user-level NuGet config instead, so that the
+devcontainer (which mounts `~/.nuget` in, see `.devcontainer/compose.yml`) picks up whatever you
+already have on the host. A placeholder in the repo config would sit closer in NuGet's config
+hierarchy and override those mounted credentials, which is why it isn't there.
+
+Restoring still requires a GitHub PAT with `read:packages`. Register it once, on the host:
+
+```sh
+dotnet nuget add source https://nuget.pkg.github.com/ELifeRPG/index.json \
+  --name eliferpg-github --username <github-username> --password <PAT> \
+  --store-password-in-clear-text --configfile ~/.nuget/NuGet/NuGet.Config
+```
+
+CI has no `~/.nuget` to mount, so it injects `secrets.GITHUB_TOKEN` into its own checked-out copy
+of `NuGet.config` in a dedicated step before restore (see `.github/workflows/ci.yml`).
 
 To pick up a new client version after a breaking or additive Central API change:
 
