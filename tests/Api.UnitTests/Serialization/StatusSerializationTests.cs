@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ELifeRPG.Bridge.Api.Endpoints;
 using ELifeRPG.Bridge.Api.Serialization;
+using ELifeRPG.Bridge.Api.Services;
 using Xunit;
 
 namespace ELifeRPG.Bridge.Api.UnitTests.Serialization;
@@ -61,5 +62,44 @@ public sealed class StatusSerializationTests
 
         Assert.Contains("\"status\":\"unlinked\"", json);
         Assert.DoesNotContain("\"status\":3", json);
+    }
+
+    [Theory]
+    [InlineData(HealthStatus.Unknown, "\"unknown\"")]
+    [InlineData(HealthStatus.Healthy, "\"healthy\"")]
+    [InlineData(HealthStatus.Degraded, "\"degraded\"")]
+    [InlineData(HealthStatus.Unhealthy, "\"unhealthy\"")]
+    public void HealthStatus_SerializesToLowerCaseNames(HealthStatus status, string expected)
+        => Assert.Equal(expected, JsonSerializer.Serialize(status, Options()));
+
+    [Fact]
+    public void HealthReport_SerializesTheShapeTheModReads()
+    {
+        var json = JsonSerializer.Serialize(
+            new HealthReport(
+                HealthStatus.Degraded,
+                DateTimeOffset.UnixEpoch,
+                [
+                    new DependencyHealth(DependencyNames.CentralApi, HealthStatus.Healthy, 12, null),
+                    new DependencyHealth(DependencyNames.Keycloak, HealthStatus.Unhealthy, 10004, "Did not answer within 10s."),
+                ]),
+            Options());
+
+        Assert.Contains("\"status\":\"degraded\"", json);
+        Assert.Contains("\"checkedAt\":", json);
+        Assert.Contains("\"name\":\"central_api\"", json);
+        Assert.Contains("\"durationMs\":12", json);
+        Assert.DoesNotContain("\"status\":2", json);
+    }
+
+    [Fact]
+    public void HealthReport_BeforeTheFirstScan_SerializesCheckedAtAsNull()
+    {
+        var json = JsonSerializer.Serialize(
+            new HealthReport(HealthStatus.Unknown, null, []),
+            Options());
+
+        Assert.Contains("\"checkedAt\":null", json);
+        Assert.Contains("\"status\":\"unknown\"", json);
     }
 }

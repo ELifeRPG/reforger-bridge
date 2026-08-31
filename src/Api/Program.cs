@@ -14,6 +14,14 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<KeycloakOptions>(builder.Configuration.GetSection("Keycloak"));
 
 builder.Services
+    .AddOptions<DependencyHealthOptions>()
+    .Bind(builder.Configuration.GetSection("DependencyHealth"))
+    .Validate(
+        options => options.ScanInterval > TimeSpan.Zero && options.ProbeTimeout > TimeSpan.Zero,
+        "DependencyHealth ScanInterval and ProbeTimeout must be positive TimeSpans, e.g. \"00:01:00\".")
+    .ValidateOnStart();
+
+builder.Services
     .AddHttpClient("Keycloak", (serviceProvider, client) =>
     {
         var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<KeycloakOptions>>().Value;
@@ -50,6 +58,40 @@ builder.Services.AddSingleton<EliferpgApiClient>(serviceProvider =>
 });
 
 builder.Services.AddSingleton<PlayerSessionTracker>();
+
+const string centralApiProbeClient = "CentralApiProbe";
+const string keycloakProbeClient = "KeycloakProbe";
+
+builder.Services.AddHttpClient(centralApiProbeClient, client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["CentralApi:BaseUrl"]!);
+});
+
+builder.Services.AddHttpClient(keycloakProbeClient, (serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<KeycloakOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+});
+
+builder.Services.AddSingleton<IDependencyProbe>(serviceProvider =>
+{
+    var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DependencyHealthOptions>>().Value;
+    var httpClient = serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(centralApiProbeClient);
+    return new HttpDependencyProbe(DependencyNames.CentralApi, httpClient, options.CentralApiProbePath);
+});
+
+builder.Services.AddSingleton<IDependencyProbe>(serviceProvider =>
+{
+    var keycloak = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<KeycloakOptions>>().Value;
+    var httpClient = serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(keycloakProbeClient);
+    return new HttpDependencyProbe(
+        DependencyNames.Keycloak,
+        httpClient,
+        $"realms/{keycloak.Realm}/.well-known/openid-configuration");
+});
+
+builder.Services.AddSingleton<DependencyHealthCache>();
+builder.Services.AddHostedService<DependencyHealthScanner>();
 
 // Results.Ok<T> serializes through these, not through Program-level defaults — see BridgeJsonOptions
 // for why a status must not reach the mod as an integer.
