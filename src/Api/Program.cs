@@ -69,6 +69,7 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+app.MapHealthEndpoints();
 app.MapSessionEndpoints();
 app.MapBankingEndpoints();
 app.MapCharacterEndpoints();
