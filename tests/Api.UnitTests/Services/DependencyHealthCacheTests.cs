@@ -1,3 +1,4 @@
+using System.Net;
 using ELifeRPG.Bridge.Api.Services;
 using Xunit;
 
@@ -8,7 +9,7 @@ public sealed class DependencyHealthCacheTests
     [Fact]
     public void Current_BeforeAnyPublish_ListsEveryProbeAsUnknown()
     {
-        var cache = new DependencyHealthCache([new StubProbe("backend"), new StubProbe("keycloak")]);
+        var cache = new DependencyHealthCache([ProbeFactory.Responding("backend", HttpStatusCode.OK), ProbeFactory.Responding("keycloak", HttpStatusCode.OK)]);
 
         var report = cache.Current;
 
@@ -22,7 +23,7 @@ public sealed class DependencyHealthCacheTests
     [Fact]
     public void Publish_ReplacesTheWholeReport()
     {
-        var cache = new DependencyHealthCache([new StubProbe("backend")]);
+        var cache = new DependencyHealthCache([ProbeFactory.Responding("backend", HttpStatusCode.OK)]);
         var published = new HealthReport(
             HealthStatus.Healthy,
             DateTimeOffset.UtcNow,

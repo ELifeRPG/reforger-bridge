@@ -5,12 +5,12 @@ using Microsoft.Extensions.Options;
 namespace ELifeRPG.Bridge.Api.Services;
 
 public sealed class DependencyHealthScanner(
-    IEnumerable<IDependencyProbe> probes,
+    IEnumerable<HttpDependencyProbe> probes,
     DependencyHealthCache cache,
     IOptions<DependencyHealthOptions> options,
     ILogger<DependencyHealthScanner> logger) : BackgroundService
 {
-    private readonly IDependencyProbe[] _probes = [.. probes];
+    private readonly HttpDependencyProbe[] _probes = [.. probes];
     private readonly DependencyHealthOptions _options = options.Value;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -60,7 +60,7 @@ public sealed class DependencyHealthScanner(
             results));
     }
 
-    private async Task<DependencyHealth> RunProbeAsync(IDependencyProbe probe, CancellationToken stoppingToken)
+    private async Task<DependencyHealth> RunProbeAsync(HttpDependencyProbe probe, CancellationToken stoppingToken)
     {
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         budget.CancelAfter(_options.ProbeTimeout);

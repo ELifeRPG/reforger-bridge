@@ -74,14 +74,14 @@ builder.Services.AddHttpClient(keycloakProbeClient, (serviceProvider, client) =>
     client.BaseAddress = new Uri(options.BaseUrl);
 });
 
-builder.Services.AddSingleton<IDependencyProbe>(serviceProvider =>
+builder.Services.AddSingleton<HttpDependencyProbe>(serviceProvider =>
 {
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DependencyHealthOptions>>().Value;
     var httpClient = serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(centralApiProbeClient);
     return new HttpDependencyProbe(DependencyNames.Backend, httpClient, options.CentralApiProbePath);
 });
 
-builder.Services.AddSingleton<IDependencyProbe>(serviceProvider =>
+builder.Services.AddSingleton<HttpDependencyProbe>(serviceProvider =>
 {
     var keycloak = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<KeycloakOptions>>().Value;
     var httpClient = serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(keycloakProbeClient);

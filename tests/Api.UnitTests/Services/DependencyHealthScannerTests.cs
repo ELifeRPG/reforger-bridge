@@ -1,3 +1,4 @@
+using System.Net;
 using ELifeRPG.Bridge.Api.Configuration;
 using ELifeRPG.Bridge.Api.Services;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -9,7 +10,7 @@ namespace ELifeRPG.Bridge.Api.UnitTests.Services;
 public sealed class DependencyHealthScannerTests
 {
     private static (DependencyHealthScanner Scanner, DependencyHealthCache Cache) Build(
-        IDependencyProbe[] probes,
+        HttpDependencyProbe[] probes,
         TimeSpan? probeTimeout = null)
     {
         var cache = new DependencyHealthCache(probes);
@@ -25,8 +26,8 @@ public sealed class DependencyHealthScannerTests
     public async Task ScanOnceAsync_PublishesOneEntryPerProbe_InRegistrationOrder()
     {
         var (scanner, cache) = Build([
-            new StubProbe("backend", new ProbeOutcome(HealthStatus.Healthy, null)),
-            new StubProbe("keycloak", new ProbeOutcome(HealthStatus.Healthy, null)),
+            ProbeFactory.Responding("backend", HttpStatusCode.OK),
+            ProbeFactory.Responding("keycloak", HttpStatusCode.OK),
         ]);
 
         await scanner.ScanOnceAsync(CancellationToken.None);
@@ -37,7 +38,7 @@ public sealed class DependencyHealthScannerTests
     [Fact]
     public async Task ScanOnceAsync_SetsCheckedAt()
     {
-        var (scanner, cache) = Build([new StubProbe("backend", new ProbeOutcome(HealthStatus.Healthy, null))]);
+        var (scanner, cache) = Build([ProbeFactory.Responding("backend", HttpStatusCode.OK)]);
 
         await scanner.ScanOnceAsync(CancellationToken.None);
 
@@ -48,8 +49,8 @@ public sealed class DependencyHealthScannerTests
     public async Task ScanOnceAsync_AggregatesTheOverallStatus()
     {
         var (scanner, cache) = Build([
-            new StubProbe("backend", new ProbeOutcome(HealthStatus.Healthy, null)),
-            new StubProbe("keycloak", new ProbeOutcome(HealthStatus.Unhealthy, "down")),
+            ProbeFactory.Responding("backend", HttpStatusCode.OK),
+            ProbeFactory.Responding("keycloak", HttpStatusCode.ServiceUnavailable),
         ]);
 
         await scanner.ScanOnceAsync(CancellationToken.None);
@@ -61,8 +62,22 @@ public sealed class DependencyHealthScannerTests
     public async Task ScanOnceAsync_WhenAProbeThrows_ReportsThatDependencyUnhealthyAndStillReportsTheOthers()
     {
         var (scanner, cache) = Build([
-            new ThrowingProbe("backend", new InvalidOperationException("boom")),
-            new StubProbe("keycloak", new ProbeOutcome(HealthStatus.Healthy, null)),
+            ProbeFactory.Throwing("backend", new HttpRequestException(HttpRequestError.ConnectionError)),
+            ProbeFactory.Responding("keycloak", HttpStatusCode.OK),
+        ]);
+
+        await scanner.ScanOnceAsync(CancellationToken.None);
+
+        Assert.Equal(HealthStatus.Unhealthy, cache.Current.Dependencies.Single(d => d.Name == "backend").Status);
+        Assert.Equal(HealthStatus.Healthy, cache.Current.Dependencies.Single(d => d.Name == "keycloak").Status);
+    }
+
+    [Fact]
+    public async Task ScanOnceAsync_WhenAProbeThrowsSomethingUnexpected_KeepsScanning()
+    {
+        var (scanner, cache) = Build([
+            ProbeFactory.Throwing("backend", new InvalidOperationException("boom")),
+            ProbeFactory.Responding("keycloak", HttpStatusCode.OK),
         ]);
 
         await scanner.ScanOnceAsync(CancellationToken.None);
@@ -74,7 +89,7 @@ public sealed class DependencyHealthScannerTests
     [Fact]
     public async Task ScanOnceAsync_WhenAProbeHangs_ReportsUnhealthyAfterTheTimeout()
     {
-        var (scanner, cache) = Build([new HangingProbe("backend")], TimeSpan.FromMilliseconds(50));
+        var (scanner, cache) = Build([ProbeFactory.Hanging("backend")], TimeSpan.FromMilliseconds(50));
 
         await scanner.ScanOnceAsync(CancellationToken.None);
 
@@ -86,7 +101,7 @@ public sealed class DependencyHealthScannerTests
     [Fact]
     public async Task ScanOnceAsync_WhenShutdownCancelsMidScan_DoesNotPublish()
     {
-        var (scanner, cache) = Build([new StubProbe("backend", new ProbeOutcome(HealthStatus.Healthy, null))]);
+        var (scanner, cache) = Build([ProbeFactory.Responding("backend", HttpStatusCode.OK)]);
         var before = cache.Current;
 
         using var cancelled = new CancellationTokenSource();

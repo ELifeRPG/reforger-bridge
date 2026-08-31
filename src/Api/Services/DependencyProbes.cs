@@ -3,16 +3,9 @@ using System.Net.Sockets;
 
 namespace ELifeRPG.Bridge.Api.Services;
 
-public interface IDependencyProbe
-{
-    string Name { get; }
-
-    Task<ProbeOutcome> ProbeAsync(CancellationToken cancellationToken);
-}
-
 public readonly record struct ProbeOutcome(HealthStatus Status, string? Detail);
 
-public sealed class HttpDependencyProbe(string name, HttpClient httpClient, string path) : IDependencyProbe
+public sealed class HttpDependencyProbe(string name, HttpClient httpClient, string path)
 {
     public string Name => name;
 

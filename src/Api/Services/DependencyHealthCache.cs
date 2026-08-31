@@ -4,7 +4,7 @@ public sealed class DependencyHealthCache
 {
     private volatile HealthReport _current;
 
-    public DependencyHealthCache(IEnumerable<IDependencyProbe> probes)
+    public DependencyHealthCache(IEnumerable<HttpDependencyProbe> probes)
         => _current = new HealthReport(
             HealthStatus.Unknown,
             null,
