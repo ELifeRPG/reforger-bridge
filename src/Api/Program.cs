@@ -78,7 +78,7 @@ builder.Services.AddSingleton<IDependencyProbe>(serviceProvider =>
 {
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DependencyHealthOptions>>().Value;
     var httpClient = serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(centralApiProbeClient);
-    return new HttpDependencyProbe(DependencyNames.CentralApi, httpClient, options.CentralApiProbePath);
+    return new HttpDependencyProbe(DependencyNames.Backend, httpClient, options.CentralApiProbePath);
 });
 
 builder.Services.AddSingleton<IDependencyProbe>(serviceProvider =>

@@ -25,19 +25,19 @@ public sealed class DependencyHealthScannerTests
     public async Task ScanOnceAsync_PublishesOneEntryPerProbe_InRegistrationOrder()
     {
         var (scanner, cache) = Build([
-            new StubProbe("central_api", new ProbeOutcome(HealthStatus.Healthy, null)),
+            new StubProbe("backend", new ProbeOutcome(HealthStatus.Healthy, null)),
             new StubProbe("keycloak", new ProbeOutcome(HealthStatus.Healthy, null)),
         ]);
 
         await scanner.ScanOnceAsync(CancellationToken.None);
 
-        Assert.Equal(["central_api", "keycloak"], cache.Current.Dependencies.Select(dependency => dependency.Name));
+        Assert.Equal(["backend", "keycloak"], cache.Current.Dependencies.Select(dependency => dependency.Name));
     }
 
     [Fact]
     public async Task ScanOnceAsync_SetsCheckedAt()
     {
-        var (scanner, cache) = Build([new StubProbe("central_api", new ProbeOutcome(HealthStatus.Healthy, null))]);
+        var (scanner, cache) = Build([new StubProbe("backend", new ProbeOutcome(HealthStatus.Healthy, null))]);
 
         await scanner.ScanOnceAsync(CancellationToken.None);
 
@@ -48,7 +48,7 @@ public sealed class DependencyHealthScannerTests
     public async Task ScanOnceAsync_AggregatesTheOverallStatus()
     {
         var (scanner, cache) = Build([
-            new StubProbe("central_api", new ProbeOutcome(HealthStatus.Healthy, null)),
+            new StubProbe("backend", new ProbeOutcome(HealthStatus.Healthy, null)),
             new StubProbe("keycloak", new ProbeOutcome(HealthStatus.Unhealthy, "down")),
         ]);
 
@@ -61,20 +61,20 @@ public sealed class DependencyHealthScannerTests
     public async Task ScanOnceAsync_WhenAProbeThrows_ReportsThatDependencyUnhealthyAndStillReportsTheOthers()
     {
         var (scanner, cache) = Build([
-            new ThrowingProbe("central_api", new InvalidOperationException("boom")),
+            new ThrowingProbe("backend", new InvalidOperationException("boom")),
             new StubProbe("keycloak", new ProbeOutcome(HealthStatus.Healthy, null)),
         ]);
 
         await scanner.ScanOnceAsync(CancellationToken.None);
 
-        Assert.Equal(HealthStatus.Unhealthy, cache.Current.Dependencies.Single(d => d.Name == "central_api").Status);
+        Assert.Equal(HealthStatus.Unhealthy, cache.Current.Dependencies.Single(d => d.Name == "backend").Status);
         Assert.Equal(HealthStatus.Healthy, cache.Current.Dependencies.Single(d => d.Name == "keycloak").Status);
     }
 
     [Fact]
     public async Task ScanOnceAsync_WhenAProbeHangs_ReportsUnhealthyAfterTheTimeout()
     {
-        var (scanner, cache) = Build([new HangingProbe("central_api")], TimeSpan.FromMilliseconds(50));
+        var (scanner, cache) = Build([new HangingProbe("backend")], TimeSpan.FromMilliseconds(50));
 
         await scanner.ScanOnceAsync(CancellationToken.None);
 
@@ -86,7 +86,7 @@ public sealed class DependencyHealthScannerTests
     [Fact]
     public async Task ScanOnceAsync_WhenShutdownCancelsMidScan_DoesNotPublish()
     {
-        var (scanner, cache) = Build([new StubProbe("central_api", new ProbeOutcome(HealthStatus.Healthy, null))]);
+        var (scanner, cache) = Build([new StubProbe("backend", new ProbeOutcome(HealthStatus.Healthy, null))]);
         var before = cache.Current;
 
         using var cancelled = new CancellationTokenSource();

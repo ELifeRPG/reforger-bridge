@@ -80,14 +80,14 @@ public sealed class StatusSerializationTests
                 HealthStatus.Degraded,
                 DateTimeOffset.UnixEpoch,
                 [
-                    new DependencyHealth(DependencyNames.CentralApi, HealthStatus.Healthy, 12, null),
+                    new DependencyHealth(DependencyNames.Backend, HealthStatus.Healthy, 12, null),
                     new DependencyHealth(DependencyNames.Keycloak, HealthStatus.Unhealthy, 10004, "Did not answer within 10s."),
                 ]),
             Options());
 
         Assert.Contains("\"status\":\"degraded\"", json);
         Assert.Contains("\"checkedAt\":", json);
-        Assert.Contains("\"name\":\"central_api\"", json);
+        Assert.Contains("\"name\":\"backend\"", json);
         Assert.Contains("\"durationMs\":12", json);
         Assert.DoesNotContain("\"status\":2", json);
     }

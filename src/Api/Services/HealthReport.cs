@@ -26,7 +26,7 @@ public enum HealthStatus
 
 public static class DependencyNames
 {
-    public const string CentralApi = "central_api";
+    public const string Backend = "backend";
 
     public const string Keycloak = "keycloak";
 }

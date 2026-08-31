@@ -8,13 +8,13 @@ public sealed class DependencyHealthCacheTests
     [Fact]
     public void Current_BeforeAnyPublish_ListsEveryProbeAsUnknown()
     {
-        var cache = new DependencyHealthCache([new StubProbe("central_api"), new StubProbe("keycloak")]);
+        var cache = new DependencyHealthCache([new StubProbe("backend"), new StubProbe("keycloak")]);
 
         var report = cache.Current;
 
         Assert.Equal(HealthStatus.Unknown, report.Status);
         Assert.Null(report.CheckedAt);
-        Assert.Equal(["central_api", "keycloak"], report.Dependencies.Select(dependency => dependency.Name));
+        Assert.Equal(["backend", "keycloak"], report.Dependencies.Select(dependency => dependency.Name));
         Assert.All(report.Dependencies, dependency => Assert.Equal(HealthStatus.Unknown, dependency.Status));
         Assert.All(report.Dependencies, dependency => Assert.Null(dependency.DurationMs));
     }
@@ -22,11 +22,11 @@ public sealed class DependencyHealthCacheTests
     [Fact]
     public void Publish_ReplacesTheWholeReport()
     {
-        var cache = new DependencyHealthCache([new StubProbe("central_api")]);
+        var cache = new DependencyHealthCache([new StubProbe("backend")]);
         var published = new HealthReport(
             HealthStatus.Healthy,
             DateTimeOffset.UtcNow,
-            [new DependencyHealth("central_api", HealthStatus.Healthy, 5, null)]);
+            [new DependencyHealth("backend", HealthStatus.Healthy, 5, null)]);
 
         cache.Publish(published);
 
