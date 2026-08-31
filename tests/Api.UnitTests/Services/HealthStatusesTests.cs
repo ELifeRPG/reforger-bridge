@@ -33,6 +33,14 @@ public sealed class HealthStatusesTests
     public void Aggregate_WithNoDependencies_ReportsUnknown()
         => Assert.Equal(HealthStatus.Unknown, HealthStatuses.Aggregate([]));
 
+    [Theory]
+    [InlineData(HealthStatus.Healthy, true)]
+    [InlineData(HealthStatus.Degraded, false)]
+    [InlineData(HealthStatus.Unhealthy, false)]
+    [InlineData(HealthStatus.Unknown, false)]
+    public void IsReady_OnlyWhenEveryDependencyIsHealthy(HealthStatus status, bool expected)
+        => Assert.Equal(expected, HealthStatuses.IsReady(status));
+
     [Fact]
     public void Aggregate_WhenOnlySomeDependenciesHaveBeenScanned_ReportsDegraded()
         => Assert.Equal(

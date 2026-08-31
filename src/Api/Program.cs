@@ -1,4 +1,5 @@
 using ELifeRPG.BackendApiClient;
+using ELifeRPG.Bridge.Api;
 using ELifeRPG.Bridge.Api.Authentication;
 using ELifeRPG.Bridge.Api.Configuration;
 using ELifeRPG.Bridge.Api.Endpoints;
@@ -100,6 +101,8 @@ builder.Services.ConfigureHttpJsonOptions(options => BridgeJsonOptions.Configure
 builder.Services.AddOpenApi("v1", options => options.AddSchemaTransformer<EnumSchemaTransformer>());
 
 var app = builder.Build();
+
+app.UseManagementSurface();
 
 if (app.Environment.IsDevelopment())
 {

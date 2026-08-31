@@ -1,8 +1,22 @@
 # eliferpg-reforger-bridge
 
 The gameserver-local process the ArmA Reforger mod actually talks to — the mod never calls the
-Central API (`eliferpg-core`) directly. Listens on `http://localhost:5200`. No auth on any of its
-own endpoints — it's meant to be called only from the same machine (the gameserver process).
+Central API (`eliferpg-core`) directly. No auth on any of its own endpoints — it's meant to be
+called only from the same machine (the gameserver process).
+
+It serves two ports, configured as Kestrel named endpoints (`Kestrel:Endpoints:Public` and
+`Kestrel:Endpoints:Management`), defaulting to `8080` and `8081` and overridden to `5200` and `5201`
+in Development:
+
+| Port | Serves |
+| --- | --- |
+| Public (`5200` in dev) | The mod contract — `/ping` and every proxy endpoint — plus `/docs` and `/openapi/v1.json` in Development |
+| Management (`5201` in dev) | `/health`, `/health/live`, `/health/ready` — nothing else |
+
+Neither port answers the other's paths; a request for the wrong surface gets a 404. Only the public
+port is meant to be exposed. Because the ports come from the Kestrel configuration section,
+`ASPNETCORE_URLS` and `launchSettings.json`'s `applicationUrl` have no effect — override
+`Kestrel__Endpoints__Public__Url` / `Kestrel__Endpoints__Management__Url` instead.
 
 Talks to the Central API exclusively over HTTP, through
 [`ELifeRPG.BackendApiClient`](https://github.com/ELifeRPG/backend-api-client-dotnet), a

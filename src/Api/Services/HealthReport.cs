@@ -33,6 +33,8 @@ public static class DependencyNames
 
 public static class HealthStatuses
 {
+    public static bool IsReady(HealthStatus status) => status == HealthStatus.Healthy;
+
     public static HealthStatus Aggregate(IReadOnlyCollection<HealthStatus> statuses)
     {
         if (statuses.Count == 0)
