@@ -33,7 +33,7 @@ repo's README). Then, from this repo:
 dotnet run --project src/Api/Api.csproj
 ```
 
-`src/Api/appsettings.Development.json` points `CentralApi:BaseUrl` at
+`src/Api/appsettings.Development.json` points `Backend:BaseUrl` at
 `http://localhost:5100` by default.
 
 ## Connection and session lifecycle

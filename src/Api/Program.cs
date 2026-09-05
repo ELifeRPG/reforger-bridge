@@ -40,9 +40,9 @@ builder.Services.AddSingleton<BridgeTokenProvider>(serviceProvider =>
 });
 
 builder.Services
-    .AddHttpClient("CentralApi", (serviceProvider, client) =>
+    .AddHttpClient("Backend", (serviceProvider, client) =>
     {
-        client.BaseAddress = new Uri(builder.Configuration["CentralApi:BaseUrl"]!);
+        client.BaseAddress = new Uri(builder.Configuration["Backend:BaseUrl"]!);
     })
     .AddStandardResilienceHandler();
 
@@ -50,22 +50,22 @@ builder.Services.AddSingleton<EliferpgApiClient>(serviceProvider =>
 {
     var tokenProvider = serviceProvider.GetRequiredService<BridgeTokenProvider>();
     var authProvider = new BaseBearerTokenAuthenticationProvider(tokenProvider);
-    var httpClient = serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient("CentralApi");
+    var httpClient = serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient("Backend");
     var adapter = new HttpClientRequestAdapter(authProvider, httpClient: httpClient)
     {
-        BaseUrl = builder.Configuration["CentralApi:BaseUrl"],
+        BaseUrl = builder.Configuration["Backend:BaseUrl"],
     };
     return new EliferpgApiClient(adapter);
 });
 
 builder.Services.AddSingleton<PlayerSessionTracker>();
 
-const string centralApiProbeClient = "CentralApiProbe";
+const string backendProbeClient = "BackendProbe";
 const string keycloakProbeClient = "KeycloakProbe";
 
-builder.Services.AddHttpClient(centralApiProbeClient, client =>
+builder.Services.AddHttpClient(backendProbeClient, client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["CentralApi:BaseUrl"]!);
+    client.BaseAddress = new Uri(builder.Configuration["Backend:BaseUrl"]!);
 });
 
 builder.Services.AddHttpClient(keycloakProbeClient, (serviceProvider, client) =>
@@ -77,8 +77,8 @@ builder.Services.AddHttpClient(keycloakProbeClient, (serviceProvider, client) =>
 builder.Services.AddSingleton<HttpDependencyProbe>(serviceProvider =>
 {
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<DependencyHealthOptions>>().Value;
-    var httpClient = serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(centralApiProbeClient);
-    return new HttpDependencyProbe(DependencyNames.Backend, httpClient, options.CentralApiProbePath);
+    var httpClient = serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(backendProbeClient);
+    return new HttpDependencyProbe(DependencyNames.Backend, httpClient, options.BackendProbePath);
 });
 
 builder.Services.AddSingleton<HttpDependencyProbe>(serviceProvider =>

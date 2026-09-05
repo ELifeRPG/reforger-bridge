@@ -6,5 +6,5 @@ public sealed class DependencyHealthOptions
 
     public TimeSpan ProbeTimeout { get; init; } = TimeSpan.FromSeconds(10);
 
-    public string CentralApiProbePath { get; init; } = "health";
+    public string BackendProbePath { get; init; } = "health";
 }
