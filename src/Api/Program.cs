@@ -98,7 +98,9 @@ builder.Services.AddHostedService<DependencyHealthScanner>();
 // for why a status must not reach the mod as an integer.
 builder.Services.ConfigureHttpJsonOptions(options => BridgeJsonOptions.Configure(options.SerializerOptions));
 
-builder.Services.AddOpenApi("v1", options => options.AddSchemaTransformer<EnumSchemaTransformer>());
+builder.Services.AddOpenApi("v1", options => options
+    .AddSchemaTransformer<EnumSchemaTransformer>()
+    .AddSchemaTransformer<BooleanSchemaTransformer>());
 
 var app = builder.Build();
 
