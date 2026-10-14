@@ -37,3 +37,29 @@ jobs:
 
       - name: Test
         run: dotnet test ELifeRPG.Bridge.slnx --no-build --configuration Release
+
+
+  image:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/eliferpg/reforger-bridge
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: docker build --secret id=nuget_token,env=GITHUB_TOKEN -t "$IMAGE:latest" -t "$IMAGE:sha-${GITHUB_SHA::7}" .
+
+      - name: Push image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          docker push --all-tags "$IMAGE"
