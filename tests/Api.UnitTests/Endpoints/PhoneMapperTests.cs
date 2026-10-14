@@ -94,15 +94,14 @@ public sealed class PhoneMapperTests
     }
 
     [Fact]
-    public void MessageUpdates_Create_CarriesTheCursorAndOnlyTheNewMessages()
+    public void MessageUpdates_Create_CarriesTheSequencesAndOnlyTheNewMessages()
     {
-        var polledAt = DateTimeOffset.UnixEpoch.AddMinutes(5);
+        var sentAt = DateTimeOffset.UnixEpoch.AddMinutes(5);
         var threadId = Guid.NewGuid();
         var messageId = Guid.NewGuid();
 
         var updates = MessageUpdates.Create(new ApiModels.MessageUpdatesDto
         {
-            PolledAt = polledAt,
             Threads =
             [
                 new ApiModels.MessageThreadUpdateDto
@@ -110,7 +109,9 @@ public sealed class PhoneMapperTests
                     Id = threadId,
                     Participants = ["12345678"],
                     UnreadCount = new UntypedInteger(1),
-                    LastMessageAt = polledAt,
+                    LastMessageAt = sentAt,
+                    RetrievedThrough = new UntypedInteger(3),
+                    HighestSequence = new UntypedInteger(4),
                     Messages =
                     [
                         new ApiModels.MessageDto
@@ -118,7 +119,7 @@ public sealed class PhoneMapperTests
                             Id = messageId,
                             From = "12345678",
                             Body = "second",
-                            SentAt = polledAt,
+                            SentAt = sentAt,
                             IsOutbound = false,
                         },
                     ],
@@ -126,12 +127,14 @@ public sealed class PhoneMapperTests
             ],
         });
 
-        // The cursor is the whole protocol: losing it means the next poll re-reads everything.
-        Assert.Equal(polledAt, updates.PolledAt);
-
         var thread = Assert.Single(updates.Threads);
         Assert.Equal(threadId, thread.ThreadId);
         Assert.Equal(1, thread.UnreadCount);
+
+        // These two are the protocol now that there is no cursor: HighestSequence is what the caller
+        // acks, RetrievedThrough is where the watermark stood when the poll was answered.
+        Assert.Equal(3, thread.RetrievedThrough);
+        Assert.Equal(4, thread.HighestSequence);
 
         var message = Assert.Single(thread.Messages);
         Assert.Equal(messageId, message.MessageId);
@@ -142,13 +145,32 @@ public sealed class PhoneMapperTests
     [Fact]
     public void MessageUpdates_Create_WithNothingNew_YieldsNoThreads()
     {
-        var updates = MessageUpdates.Create(new ApiModels.MessageUpdatesDto
-        {
-            PolledAt = DateTimeOffset.UnixEpoch,
-            Threads = null,
-        });
+        var updates = MessageUpdates.Create(new ApiModels.MessageUpdatesDto { Threads = null });
 
         Assert.Empty(updates.Threads);
+    }
+
+    [Fact]
+    public void AckedPhoneMessages_Create_EchoesWatermarksAndDropsNullUnknownIds()
+    {
+        var threadId = Guid.NewGuid();
+        var unknownId = Guid.NewGuid();
+
+        var acked = AckedPhoneMessages.Create(new ApiModels.AckMessageUpdatesResponseDto
+        {
+            Threads =
+            [
+                new ApiModels.AckThreadWatermarkDto { ThreadId = threadId, RetrievedThrough = new UntypedInteger(4) },
+            ],
+            // Kiota types this as List<Guid?>, so the mapper has to drop nulls rather than hand the
+            // mod a nullable it cannot represent.
+            UnknownThreadIds = [unknownId, null],
+        });
+
+        var watermark = Assert.Single(acked.Threads);
+        Assert.Equal(threadId, watermark.ThreadId);
+        Assert.Equal(4, watermark.RetrievedThrough);
+        Assert.Equal(unknownId, Assert.Single(acked.UnknownThreadIds));
     }
 
     [Fact]
@@ -179,8 +201,41 @@ public sealed class PhoneMapperTests
         Assert.Equal("12345678", contact.Number);
         Assert.Equal("Dispatcher", contact.DisplayName);
 
-        var app = PhoneApp.Create(new ApiModels.PhoneAppDto { Key = "Messages", DisplayName = "Messages" });
+        var app = PhoneApp.Create(new ApiModels.PhoneAppDto
+        {
+            Key = "Messages",
+            DisplayName = "Messages",
+            IsSystemApp = true,
+        });
+
         Assert.Equal("Messages", app.Key);
         Assert.Equal("Messages", app.DisplayName);
+        Assert.True(app.IsSystemApp);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void StoreApp_Create_MapsTheInstallState(bool installed)
+    {
+        var app = StoreApp.Create(new ApiModels.StoreAppDto
+        {
+            Key = "Bank",
+            DisplayName = "Bank",
+            IsInstalled = installed,
+        });
+
+        Assert.Equal("Bank", app.Key);
+        Assert.Equal("Bank", app.DisplayName);
+        Assert.Equal(installed, app.IsInstalled);
+    }
+
+    [Fact]
+    public void PhoneApp_And_StoreApp_Create_WithNullFlags_DefaultToFalse()
+    {
+        // Kiota declares both flags bool?, so an absent field would otherwise NRE rather than
+        // default — and "false" is the safe answer for each: not a system app, not installed.
+        Assert.False(PhoneApp.Create(new ApiModels.PhoneAppDto { Key = "Bank", DisplayName = "Bank" }).IsSystemApp);
+        Assert.False(StoreApp.Create(new ApiModels.StoreAppDto { Key = "Bank", DisplayName = "Bank" }).IsInstalled);
     }
 }

@@ -28,6 +28,13 @@ public static class UntypedNodeExtensions
         _ => throw new InvalidOperationException($"Unexpected untyped node type for a decimal field: {node.GetType().Name}"),
     };
 
+    /// <summary>
+    /// The write direction, for a request DTO whose int field Kiota also declares as UntypedNode —
+    /// the message-ack sequences are the first. A whole number is always an UntypedInteger on the
+    /// way out; the ambiguity described above is a deserialization problem, not a serialization one.
+    /// </summary>
+    public static UntypedNode ToUntypedNode(this int value) => new UntypedInteger(value);
+
     public static int ToInt32(this UntypedNode node) => node switch
     {
         UntypedInteger i => i.GetValue(),
