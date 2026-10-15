@@ -124,5 +124,6 @@ app.MapCompanyEndpoints();
 app.MapPhoneEndpoints();
 app.MapPhoneContactEndpoints();
 app.MapPhoneMessageEndpoints();
+app.MapPhoneNotificationEndpoints();
 
 app.Run();

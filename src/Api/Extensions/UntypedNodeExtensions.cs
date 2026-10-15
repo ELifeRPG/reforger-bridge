@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Kiota.Abstractions.Serialization;
 
 namespace ELifeRPG.Bridge.Api.Extensions;
@@ -34,6 +35,48 @@ public static class UntypedNodeExtensions
     /// way out; the ambiguity described above is a deserialization problem, not a serialization one.
     /// </summary>
     public static UntypedNode ToUntypedNode(this int value) => new UntypedInteger(value);
+
+    /// <summary>
+    /// A notification's <c>Payload</c> is a string-to-string map in the Central API, but an open
+    /// OpenAPI object reaches Kiota as an IAdditionalDataHolder whose values are <c>object</c> — and
+    /// Kiota *sniffs a type out of the JSON content* rather than handing back what the schema said.
+    /// A string holding a GUID deserializes as <see cref="Guid"/>, one holding a timestamp as
+    /// <see cref="DateTimeOffset"/>; only text that resembles nothing stays a string. Messages'
+    /// payload is two GUIDs, so the common case is the sniffed one, not the declared one.
+    ///
+    /// Each shape is therefore formatted back to the string the Central API actually sent —
+    /// round-trip formats, not <c>ToString()</c>, so a GUID keeps its canonical form, a timestamp
+    /// keeps ISO-8601 and a bool stays lowercase JSON rather than becoming "True". A nested object
+    /// or array means the string-to-string contract itself broke, which is worth failing loudly for
+    /// rather than papering over with a type name.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> ToStringDictionary(this IAdditionalDataHolder? holder)
+    {
+        if (holder?.AdditionalData is not { Count: > 0 } data)
+        {
+            return new Dictionary<string, string>();
+        }
+
+        return data.ToDictionary(entry => entry.Key, entry => ToPayloadString(entry.Key, entry.Value));
+    }
+
+    private static string ToPayloadString(string key, object? value) => value switch
+    {
+        null or UntypedNull => string.Empty,
+        string text => text,
+        Guid guid => guid.ToString("D", CultureInfo.InvariantCulture),
+        DateTimeOffset at => at.ToString("O", CultureInfo.InvariantCulture),
+        DateTime at => at.ToString("O", CultureInfo.InvariantCulture),
+        DateOnly date => date.ToString("O", CultureInfo.InvariantCulture),
+        TimeOnly time => time.ToString("O", CultureInfo.InvariantCulture),
+        bool flag => flag ? "true" : "false",
+        UntypedString s => s.GetValue() ?? string.Empty,
+        UntypedBoolean b => b.GetValue() ? "true" : "false",
+        UntypedNode node => node.ToDecimal().ToString(CultureInfo.InvariantCulture),
+        IFormattable number => number.ToString(null, CultureInfo.InvariantCulture),
+        _ => throw new InvalidOperationException(
+            $"Payload value for key '{key}' is neither a scalar nor null, so the string-to-string contract no longer holds: {value.GetType().Name}"),
+    };
 
     public static int ToInt32(this UntypedNode node) => node switch
     {
