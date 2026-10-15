@@ -213,6 +213,98 @@ public sealed class PhoneMapperTests
         Assert.True(app.IsSystemApp);
     }
 
+    [Fact]
+    public void PhoneNotification_Create_MapsEveryFieldAndFlattensThePayload()
+    {
+        var id = Guid.NewGuid();
+        var threadId = Guid.NewGuid();
+        var occurredAt = DateTimeOffset.UnixEpoch.AddHours(3);
+
+        var payload = new ApiModels.PhoneNotificationDto_payload();
+        // A real Messages payload is two GUID strings, and Kiota sniffs a type out of the JSON
+        // content rather than honouring the declared string: it hands back a System.Guid. That is
+        // the shape that 500'd the endpoint before this mapper formatted it back, so it is the
+        // important case here, not the declared one.
+        payload.AdditionalData["threadId"] = threadId;
+        payload.AdditionalData["messageId"] = new UntypedString("abc");
+        payload.AdditionalData["plain"] = "text";
+
+        var notification = PhoneNotification.Create(new ApiModels.PhoneNotificationDto
+        {
+            Id = id,
+            AppKey = "Messages",
+            Category = "message.received",
+            GroupKey = threadId.ToString(),
+            Title = "12345678",
+            Body = "on my way",
+            Payload = payload,
+            OccurredAt = occurredAt,
+        });
+
+        Assert.Equal(id, notification.NotificationId);
+        Assert.Equal("Messages", notification.AppKey);
+        Assert.Equal("message.received", notification.Category);
+        Assert.Equal(threadId.ToString(), notification.GroupKey);
+        Assert.Equal("12345678", notification.Title);
+        Assert.Equal("on my way", notification.Body);
+        Assert.Equal(occurredAt, notification.OccurredAt);
+
+        // Canonical GUID form, which is the string the Central API actually sent.
+        Assert.Equal(threadId.ToString("D"), notification.Payload["threadId"]);
+        Assert.Equal("abc", notification.Payload["messageId"]);
+        Assert.Equal("text", notification.Payload["plain"]);
+    }
+
+    [Fact]
+    public void PhoneNotification_Create_FormatsEverySniffedScalarBackToItsJsonForm()
+    {
+        // The other shapes Kiota's type sniffing can produce from a string-to-string map. Each is
+        // formatted round-trip rather than via ToString(), so a timestamp keeps ISO-8601 and a bool
+        // stays lowercase instead of becoming "True".
+        var at = new DateTimeOffset(2026, 10, 15, 17, 18, 57, TimeSpan.Zero);
+
+        var payload = new ApiModels.PhoneNotificationDto_payload();
+        payload.AdditionalData["when"] = at;
+        payload.AdditionalData["flag"] = true;
+        payload.AdditionalData["count"] = 42;
+        payload.AdditionalData["missing"] = null!;
+
+        var notification = PhoneNotification.Create(new ApiModels.PhoneNotificationDto
+        {
+            Id = Guid.NewGuid(),
+            AppKey = "Messages",
+            Category = "c",
+            GroupKey = "g",
+            Title = "t",
+            Body = "b",
+            Payload = payload,
+            OccurredAt = at,
+        });
+
+        Assert.Equal(at.ToString("O"), notification.Payload["when"]);
+        Assert.Equal("true", notification.Payload["flag"]);
+        Assert.Equal("42", notification.Payload["count"]);
+        Assert.Equal(string.Empty, notification.Payload["missing"]);
+    }
+
+    [Fact]
+    public void PhoneNotification_Create_WithNoPayload_YieldsAnEmptyMapRatherThanNull()
+    {
+        var notification = PhoneNotification.Create(new ApiModels.PhoneNotificationDto
+        {
+            Id = Guid.NewGuid(),
+            AppKey = "Messages",
+            Category = "message.received",
+            GroupKey = "g",
+            Title = "t",
+            Body = "b",
+            Payload = null,
+            OccurredAt = DateTimeOffset.UnixEpoch,
+        });
+
+        Assert.Empty(notification.Payload);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
