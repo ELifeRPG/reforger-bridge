@@ -5,7 +5,7 @@ using ApiModels = ELifeRPG.BackendApiClient.Models;
 namespace ELifeRPG.Bridge.Api.Endpoints;
 
 /// <summary>
-/// The handset itself: provisioning, power, PIN, apps, and the two enforcement actions.
+/// The handset itself: provisioning, power, PIN, apps, the store, and the two enforcement actions.
 ///
 /// These are the only phone routes that name an acting character. Possession is proven once, when
 /// the phone is switched on — the Central API's guard chain then requires a powered-on phone for
@@ -35,7 +35,7 @@ public static class PhoneEndpoints
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
             .WithName("ProvisionPhone")
-            .WithDescription("Provisions a phone with a fresh number and a PIN, registered to a character. Ships powered off, with every app installed. The PIN is 4-8 digits and is never readable back.");
+            .WithDescription("Provisions a phone with a fresh number and a PIN, registered to a character. Ships powered off, with its system apps installed — Bank and Map come from the store. The PIN is 4-8 digits and is never readable back.");
 
         group.MapGet("characters/{characterId:guid}/phones", async (
                 Guid characterId,
@@ -128,7 +128,24 @@ public static class PhoneEndpoints
             .Produces<IEnumerable<PhoneApp>>()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithName("ListPhoneApps")
-            .WithDescription("Lists the apps installed on a phone.");
+            .WithDescription("Lists the apps installed on a phone, and which of them are system apps that can not be removed.");
+
+        group.MapGet("phones/{phoneId:guid}/app-store/apps", async (
+                Guid phoneId,
+                EliferpgApiClient apiClient,
+                CancellationToken cancellationToken) =>
+            {
+                return await ApiCallExtensions.ExecuteAsync(
+                    () => apiClient.Api.Phones[phoneId].AppStore.Apps.GetAsync(cancellationToken: cancellationToken),
+                    apps => Results.Ok(apps?.Select(StoreApp.Create).ToList() ?? []));
+            })
+            .Produces<IEnumerable<StoreApp>>()
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status410Gone)
+            .WithName("ListStoreApps")
+            .WithDescription("Lists what the store offers and whether this phone already has each one. The phone's own system apps are not offered — they can be neither installed nor removed from here. Browsing happens on the handset, so this runs the app guard chain: a powered-off phone is 409.");
 
         group.MapPut("phones/{phoneId:guid}/apps/{appKey}", async (
                 Guid phoneId,
@@ -149,7 +166,7 @@ public static class PhoneEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status410Gone)
             .WithName("InstallPhoneApp")
-            .WithDescription("Installs an app. Every phone can run every app; installing Messages delivers whatever queued while it was gone. Idempotent.");
+            .WithDescription("Installs an app. Every phone can run every app, system apps included — installing one is how a phone provisioned before that app existed receives it. Idempotent.");
 
         group.MapDelete("phones/{phoneId:guid}/apps/{appKey}", async (
                 Guid phoneId,
@@ -173,8 +190,9 @@ public static class PhoneEndpoints
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
             .WithName("UninstallPhoneApp")
-            .WithDescription("Uninstalls an app. Idempotent, and nothing is lost — contacts and threads belong to the phone, and messages queue rather than vanish.");
+            .WithDescription("Uninstalls a store app. Idempotent, and nothing stored is lost — contacts and threads belong to the phone, so reinstalling brings them back. A system app is refused with 409: it is the phone's own software.");
 
         group.MapPost("phones/{phoneId:guid}/suspend", async (
                 Guid phoneId,
@@ -228,9 +246,24 @@ public sealed record PhoneActorRequest(Guid CharacterId, string? Pin = null);
 
 public sealed record SuspendPhoneRequest(string Reason);
 
-public sealed record PhoneApp(string Key, string DisplayName)
+/// <summary>
+/// <paramref name="IsSystemApp"/> is what tells the mod which rows it may offer to remove, without a
+/// second call to the store to work it out by omission.
+/// </summary>
+public sealed record PhoneApp(string Key, string DisplayName, bool IsSystemApp)
 {
-    public static PhoneApp Create(ApiModels.PhoneAppDto source) => new(source.Key!, source.DisplayName!);
+    public static PhoneApp Create(ApiModels.PhoneAppDto source) =>
+        new(source.Key!, source.DisplayName!, source.IsSystemApp ?? false);
+}
+
+/// <summary>
+/// A store entry. No <c>IsSystemApp</c>: the store lists only what it can act on, so the field would
+/// be a constant false on every row.
+/// </summary>
+public sealed record StoreApp(string Key, string DisplayName, bool IsInstalled)
+{
+    public static StoreApp Create(ApiModels.StoreAppDto source) =>
+        new(source.Key!, source.DisplayName!, source.IsInstalled ?? false);
 }
 
 /// <summary>

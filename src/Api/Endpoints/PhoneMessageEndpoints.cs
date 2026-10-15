@@ -19,14 +19,11 @@ public static class PhoneMessageEndpoints
 
         group.MapGet("phones/{phoneId:guid}/apps/messages/updates", async (
                 Guid phoneId,
-                DateTimeOffset? since,
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
                 return await ApiCallExtensions.ExecuteAsync(
-                    () => apiClient.Api.Phones[phoneId].Apps.Messages.Updates.GetAsync(
-                        configuration => configuration.QueryParameters.Since = since,
-                        cancellationToken),
+                    () => apiClient.Api.Phones[phoneId].Apps.Messages.Updates.GetAsync(cancellationToken: cancellationToken),
                     updates => updates is null
                         ? Results.Problem("Central API returned an empty updates response.")
                         : Results.Ok(MessageUpdates.Create(updates)));
@@ -37,7 +34,39 @@ public static class PhoneMessageEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status410Gone)
             .WithName("PollPhoneMessages")
-            .WithDescription("Reports what arrived on a phone since a cursor. Omit `since` on the first call to get every thread whole, then send back the `polledAt` you were given. Delivery is at-least-once — the same message can arrive twice, so dedupe on `messageId`. This is the mod's delivery path: the Central API also pushes over SignalR, which Reforger cannot consume.");
+            .WithDescription("Reports every message this phone has not yet retrieved. There is no cursor to hold any more: retrieval is a watermark the Central API tracks per thread, and only an ack advances it — so an unacked poll repeats. Delivery is at-least-once, so dedupe on `messageId`. This is the mod's delivery path: the Central API also pushes over SignalR, which Reforger cannot consume.");
+
+        group.MapPost("phones/{phoneId:guid}/apps/messages/updates/ack", async (
+                Guid phoneId,
+                AckPhoneMessagesRequest request,
+                EliferpgApiClient apiClient,
+                CancellationToken cancellationToken) =>
+            {
+                return await ApiCallExtensions.ExecuteAsync(
+                    () => apiClient.Api.Phones[phoneId].Apps.Messages.Updates.Ack.PostAsync(
+                        new ApiModels.AckMessageUpdatesRequestDto
+                        {
+                            Threads =
+                            [
+                                .. request.Threads.Select(thread => new ApiModels.AckThreadDto
+                                {
+                                    ThreadId = thread.ThreadId,
+                                    ThroughSequence = thread.ThroughSequence.ToUntypedNode(),
+                                }),
+                            ],
+                        },
+                        cancellationToken: cancellationToken),
+                    acked => acked is null
+                        ? Results.Problem("Central API returned an empty ack response.")
+                        : Results.Ok(AckedPhoneMessages.Create(acked)));
+            })
+            .Produces<AckedPhoneMessages>()
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status410Gone)
+            .WithName("AckPhoneMessages")
+            .WithDescription("Advances the retrieval watermark to the `highestSequence` you finished processing, per thread. Leave a thread off to have it redelivered; re-sending the same ack is a no-op. Acking needs the phone powered on, so a power-cycle mid-batch redelivers rather than loses.");
 
         group.MapGet("phones/{phoneId:guid}/apps/messages/threads", async (
                 Guid phoneId,
@@ -219,14 +248,20 @@ public sealed record MessageThreadDetail(
 }
 
 /// <summary>
-/// One thread as a poll reports it: <paramref name="Messages"/> carries only what arrived after the
-/// caller's cursor, not the thread's whole history.
+/// One thread as a poll reports it: <paramref name="Messages"/> carries only what this phone has not
+/// retrieved, not the thread's whole history.
+///
+/// <paramref name="HighestSequence"/> is what you ack once the batch is processed, and
+/// <paramref name="RetrievedThrough"/> is where the watermark stood when the poll was answered —
+/// together they say exactly what this poll is asking you to take responsibility for.
 /// </summary>
 public sealed record MessageThreadUpdate(
     Guid ThreadId,
     IReadOnlyList<string> Participants,
     int UnreadCount,
     DateTimeOffset LastMessageAt,
+    int RetrievedThrough,
+    int HighestSequence,
     IReadOnlyList<PhoneMessage> Messages)
 {
     public static MessageThreadUpdate Create(ApiModels.MessageThreadUpdateDto source) => new(
@@ -234,16 +269,44 @@ public sealed record MessageThreadUpdate(
         source.Participants ?? [],
         source.UnreadCount?.ToInt32() ?? 0,
         source.LastMessageAt!.Value,
+        source.RetrievedThrough?.ToInt32() ?? 0,
+        source.HighestSequence?.ToInt32() ?? 0,
         source.Messages?.Select(PhoneMessage.Create).ToList() ?? []);
 }
 
 /// <summary>
-/// <paramref name="PolledAt"/> is the cursor to send back as <c>since</c> on the next poll. Holding
-/// on to it is the whole protocol; a caller that loses it polls without one and gets everything.
+/// No cursor: what to send back is a per-thread sequence, through
+/// <c>POST .../apps/messages/updates/ack</c>. A caller that acks nothing is handed the same batch
+/// again, which is the safe direction.
 /// </summary>
-public sealed record MessageUpdates(DateTimeOffset PolledAt, IReadOnlyList<MessageThreadUpdate> Threads)
+public sealed record MessageUpdates(IReadOnlyList<MessageThreadUpdate> Threads)
 {
     public static MessageUpdates Create(ApiModels.MessageUpdatesDto source) => new(
-        source.PolledAt!.Value,
         source.Threads?.Select(MessageThreadUpdate.Create).ToList() ?? []);
+}
+
+/// <summary>One thread's high-water sequence the caller has finished processing.</summary>
+public sealed record AckPhoneMessagesThread(Guid ThreadId, int ThroughSequence);
+
+public sealed record AckPhoneMessagesRequest(IReadOnlyList<AckPhoneMessagesThread> Threads);
+
+/// <summary>
+/// <paramref name="Threads"/> echoes each acked thread's watermark as it stands after the clamp, so
+/// the effective value is visible without a second poll. <paramref name="UnknownThreadIds"/> lists
+/// any thread id that does not belong to this phone.
+/// </summary>
+public sealed record AckedPhoneMessages(
+    IReadOnlyList<AckedPhoneMessagesThread> Threads,
+    IReadOnlyList<Guid> UnknownThreadIds)
+{
+    public static AckedPhoneMessages Create(ApiModels.AckMessageUpdatesResponseDto source) => new(
+        source.Threads?.Select(AckedPhoneMessagesThread.Create).ToList() ?? [],
+        [.. source.UnknownThreadIds?.Where(id => id.HasValue).Select(id => id!.Value) ?? []]);
+}
+
+public sealed record AckedPhoneMessagesThread(Guid ThreadId, int RetrievedThrough)
+{
+    public static AckedPhoneMessagesThread Create(ApiModels.AckThreadWatermarkDto source) => new(
+        source.ThreadId!.Value,
+        source.RetrievedThrough?.ToInt32() ?? 0);
 }
