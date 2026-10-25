@@ -131,7 +131,9 @@ public static class PhoneEndpoints
             .WithName("GetPhonePreferences")
             .WithDescription("Gets a phone's home screen layout, wallpaper and Do Not Disturb. Empty values mean the mod's defaults, which is what a new phone starts with.");
 
-        group.MapPatch("phones/{phoneId:guid}/preferences", async (
+        // POST rather than the Central API's PATCH: Reforger's REST client can not send PATCH, and
+        // this is the surface the mod calls. Still a partial update — see UpdatePhonePreferencesRequest.
+        group.MapPost("phones/{phoneId:guid}/preferences", async (
                 Guid phoneId,
                 UpdatePhonePreferencesRequest request,
                 EliferpgApiClient apiClient,
