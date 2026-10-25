@@ -5,7 +5,8 @@ using ApiModels = ELifeRPG.BackendApiClient.Models;
 namespace ELifeRPG.Bridge.Api.Endpoints;
 
 /// <summary>
-/// The handset itself: provisioning, power, PIN, apps, the store, and the two enforcement actions.
+/// The handset itself: provisioning, power, PIN, preferences, apps, the store, and the two
+/// enforcement actions.
 ///
 /// These are the only phone routes that name an acting character. Possession is proven once, when
 /// the phone is switched on — the Central API's guard chain then requires a powered-on phone for
@@ -64,7 +65,7 @@ public static class PhoneEndpoints
             .Produces<PhoneSummary>()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithName("GetPhone")
-            .WithDescription("Gets a phone: its number, status, power state, blocklist and installed apps. Never its PIN.");
+            .WithDescription("Gets a phone: its number, status, power state, blocklist, installed apps and preferences — everything needed to rebuild it after a restart. Never its PIN.");
 
         group.MapPost("phones/{phoneId:guid}/power", async (
                 Guid phoneId,
@@ -115,6 +116,40 @@ public static class PhoneEndpoints
             .ProducesProblem(StatusCodes.Status410Gone)
             .WithName("ChangePhonePin")
             .WithDescription("Sets a new PIN. Takes the owner, or the current PIN from whoever else is holding the phone — so whoever picks one up and knows the code can lock the previous owner out.");
+
+        group.MapGet("phones/{phoneId:guid}/preferences", async (
+                Guid phoneId,
+                EliferpgApiClient apiClient,
+                CancellationToken cancellationToken) =>
+            {
+                return await ApiCallExtensions.ExecuteAsync(
+                    () => apiClient.Api.Phones[phoneId].Preferences.GetAsync(cancellationToken: cancellationToken),
+                    preferences => Results.Ok(PhonePreferences.Create(preferences)));
+            })
+            .Produces<PhonePreferences>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .WithName("GetPhonePreferences")
+            .WithDescription("Gets a phone's home screen layout, wallpaper and Do Not Disturb. Empty values mean the mod's defaults, which is what a new phone starts with.");
+
+        group.MapPatch("phones/{phoneId:guid}/preferences", async (
+                Guid phoneId,
+                UpdatePhonePreferencesRequest request,
+                EliferpgApiClient apiClient,
+                CancellationToken cancellationToken) =>
+            {
+                return await ApiCallExtensions.ExecuteAsync(
+                    () => apiClient.Api.Phones[phoneId].Preferences.PatchAsync(
+                        request.ToCentralApi(),
+                        cancellationToken: cancellationToken),
+                    preferences => Results.Ok(PhonePreferences.Create(preferences)));
+            })
+            .Produces<PhonePreferences>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status410Gone)
+            .WithName("UpdatePhonePreferences")
+            .WithDescription("Changes only the preferences it is sent, and returns all of them. homeLayout (at most 1024 characters) and layoutVersion travel together; wallpaper is at most 64. Takes the owner, or the PIN from whoever else is holding the phone, and works with the phone off.");
 
         group.MapGet("phones/{phoneId:guid}/apps", async (
                 Guid phoneId,
@@ -247,6 +282,51 @@ public sealed record PhoneActorRequest(Guid CharacterId, string? Pin = null);
 public sealed record SuspendPhoneRequest(string Reason);
 
 /// <summary>
+/// Omitted (null) fields are left unchanged; <c>""</c> clears one back to the mod's default.
+/// <paramref name="LayoutVersion"/> and <paramref name="HomeLayout"/> must be sent together — the
+/// Central API refuses one without the other with 400.
+/// </summary>
+public sealed record UpdatePhonePreferencesRequest(
+    Guid CharacterId,
+    string? Pin = null,
+    int? LayoutVersion = null,
+    string? HomeLayout = null,
+    string? Wallpaper = null,
+    bool? DoNotDisturb = null)
+{
+    // Kiota skips null properties when it serialises, so an omitted field stays omitted on the way
+    // to the Central API rather than arriving as an explicit null.
+    public ApiModels.UpdatePhonePreferencesRequestDto ToCentralApi() => new()
+    {
+        CharacterId = CharacterId,
+        Pin = Pin,
+        LayoutVersion = LayoutVersion?.ToUntypedNode(),
+        HomeLayout = HomeLayout,
+        Wallpaper = Wallpaper,
+        DoNotDisturb = DoNotDisturb,
+    };
+}
+
+/// <summary>
+/// The phone's own settings, shared by everyone looking at it. Opaque to the Bridge and the Central
+/// API alike: <paramref name="HomeLayout"/> and <paramref name="Wallpaper"/> are the mod's formats,
+/// stored as-is, and <paramref name="LayoutVersion"/> is what lets the mod migrate its layout later.
+/// </summary>
+public sealed record PhonePreferences(int LayoutVersion, string HomeLayout, string Wallpaper, bool DoNotDisturb)
+{
+    /// <summary>
+    /// Every field defaults to the empty "use the mod's defaults" value, so a missing object — or a
+    /// Central API from before preferences existed — reads as a phone nobody has customised.
+    /// </summary>
+    public static PhonePreferences Create(ApiModels.PhonePreferencesDto? source) => new(
+        // LayoutVersion crosses as an UntypedNode, not an int — see UntypedNodeExtensions.
+        source?.LayoutVersion?.ToInt32() ?? 0,
+        source?.HomeLayout ?? string.Empty,
+        source?.Wallpaper ?? string.Empty,
+        source?.DoNotDisturb ?? false);
+}
+
+/// <summary>
 /// <paramref name="IsSystemApp"/> is what tells the mod which rows it may offer to remove, without a
 /// second call to the store to work it out by omission.
 /// </summary>
@@ -277,7 +357,8 @@ public sealed record PhoneSummary(
     PhoneStatus Status,
     bool IsPoweredOn,
     IReadOnlyList<string> BlockedNumbers,
-    IReadOnlyList<string> InstalledApps)
+    IReadOnlyList<string> InstalledApps,
+    PhonePreferences Preferences)
 {
     public static PhoneSummary Create(ApiModels.PhoneDto source) => new(
         source.Id!.Value,
@@ -286,7 +367,8 @@ public sealed record PhoneSummary(
         FromCentralApi(source.Status),
         source.IsPoweredOn ?? false,
         source.BlockedNumbers ?? [],
-        source.InstalledApps ?? []);
+        source.InstalledApps ?? [],
+        PhonePreferences.Create(source.Preferences));
 
     private static PhoneStatus FromCentralApi(string? status) => status switch
     {

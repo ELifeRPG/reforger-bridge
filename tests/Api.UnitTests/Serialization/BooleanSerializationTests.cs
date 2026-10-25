@@ -33,6 +33,32 @@ public sealed class BooleanSerializationTests
     }
 
     [Theory]
+    [InlineData("1", true)]
+    [InlineData("0", false)]
+    public void UpdatePhonePreferencesRequest_ReadsDoNotDisturbFromNumberOrBoolean(string doNotDisturb, bool expected)
+    {
+        var json = $$"""{"characterId":"8a1e2d3c-4f5a-4b6c-9d7e-8f9a0b1c2d3e","doNotDisturb":{{doNotDisturb}}}""";
+
+        var request = JsonSerializer.Deserialize<UpdatePhonePreferencesRequest>(json, Options());
+
+        Assert.NotNull(request);
+        Assert.Equal(expected, request.DoNotDisturb);
+    }
+
+    [Fact]
+    public void UpdatePhonePreferencesRequest_WithDoNotDisturbOmitted_LeavesItNull()
+    {
+        // Omitted means "unchanged" — it must not read as false and switch Do Not Disturb off.
+        var json = """{"characterId":"8a1e2d3c-4f5a-4b6c-9d7e-8f9a0b1c2d3e","wallpaper":"Night"}""";
+
+        var request = JsonSerializer.Deserialize<UpdatePhonePreferencesRequest>(json, Options());
+
+        Assert.NotNull(request);
+        Assert.Null(request.DoNotDisturb);
+        Assert.Equal("Night", request.Wallpaper);
+    }
+
+    [Theory]
     [InlineData("2")]
     [InlineData("-1")]
     [InlineData("1.5")]
