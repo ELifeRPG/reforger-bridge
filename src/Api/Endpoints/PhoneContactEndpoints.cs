@@ -57,7 +57,9 @@ public static class PhoneContactEndpoints
             .WithName("SavePhoneContact")
             .WithDescription("Saves a number to a phone's address book. Numbers may be typed with spaces, dashes, parentheses or a leading +; the Central API canonicalises them.");
 
-        group.MapPatch("phones/{phoneId:guid}/apps/contacts/entries/{contactId:guid}", async (
+        // POST rather than the Central API's PATCH: Reforger's REST client can not send PATCH, and
+        // this is the surface the mod calls.
+        group.MapPost("phones/{phoneId:guid}/apps/contacts/entries/{contactId:guid}", async (
                 Guid phoneId,
                 Guid contactId,
                 RenamePhoneContactRequest request,
