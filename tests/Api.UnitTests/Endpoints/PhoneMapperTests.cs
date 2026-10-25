@@ -330,4 +330,67 @@ public sealed class PhoneMapperTests
         Assert.False(PhoneApp.Create(new ApiModels.PhoneAppDto { Key = "Bank", DisplayName = "Bank" }).IsSystemApp);
         Assert.False(StoreApp.Create(new ApiModels.StoreAppDto { Key = "Bank", DisplayName = "Bank" }).IsInstalled);
     }
+
+    [Fact]
+    public void PhonePreferences_Create_UnwrapsTheLayoutVersionAndMapsEveryField()
+    {
+        var preferences = PhonePreferences.Create(new ApiModels.PhonePreferencesDto
+        {
+            LayoutVersion = new UntypedInteger(3),
+            HomeLayout = "a:1,b:2",
+            Wallpaper = "Night",
+            DoNotDisturb = true,
+        });
+
+        Assert.Equal(new PhonePreferences(3, "a:1,b:2", "Night", true), preferences);
+    }
+
+    [Fact]
+    public void PhonePreferences_Create_WithNothingFromCore_IsTheEmptyDefaults()
+    {
+        // A missing object reads as a phone nobody has customised — the mod's defaults.
+        Assert.Equal(new PhonePreferences(0, string.Empty, string.Empty, false), PhonePreferences.Create(null));
+        Assert.Equal(new PhonePreferences(0, string.Empty, string.Empty, false), PhonePreferences.Create(new ApiModels.PhonePreferencesDto()));
+    }
+
+    [Fact]
+    public void PhoneSummary_Create_CarriesThePreferences_SoARestoreIsOneCall()
+    {
+        var summary = PhoneSummary.Create(new ApiModels.PhoneDto
+        {
+            Id = Guid.NewGuid(),
+            Number = "12345678",
+            RegisteredTo = Guid.NewGuid(),
+            Status = "Active",
+            Preferences = new ApiModels.PhonePreferencesDto { Wallpaper = "Night", DoNotDisturb = true },
+        });
+
+        Assert.Equal("Night", summary.Preferences.Wallpaper);
+        Assert.True(summary.Preferences.DoNotDisturb);
+    }
+
+    [Fact]
+    public void UpdatePhonePreferencesRequest_ToCentralApi_LeavesOmittedFieldsNull()
+    {
+        // Null is what tells the Central API "unchanged", so an omitted field must not be defaulted.
+        var characterId = Guid.NewGuid();
+
+        var dto = new UpdatePhonePreferencesRequest(characterId, DoNotDisturb: true).ToCentralApi();
+
+        Assert.Equal(characterId, dto.CharacterId);
+        Assert.True(dto.DoNotDisturb);
+        Assert.Null(dto.Pin);
+        Assert.Null(dto.LayoutVersion);
+        Assert.Null(dto.HomeLayout);
+        Assert.Null(dto.Wallpaper);
+    }
+
+    [Fact]
+    public void UpdatePhonePreferencesRequest_ToCentralApi_SendsTheLayoutVersionAsAnInteger()
+    {
+        var dto = new UpdatePhonePreferencesRequest(Guid.NewGuid(), LayoutVersion: 2, HomeLayout: "a:1").ToCentralApi();
+
+        Assert.Equal(2, Assert.IsType<UntypedInteger>(dto.LayoutVersion).GetValue());
+        Assert.Equal("a:1", dto.HomeLayout);
+    }
 }
