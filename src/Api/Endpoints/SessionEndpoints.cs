@@ -19,7 +19,11 @@ public static class SessionEndpoints
                 CancellationToken cancellationToken) =>
             {
                 var session = await apiClient.Api.Accounts.SessionBootstrap.PostAsync(
-                    new ApiModels.CreateSessionRequestDto { BohemiaId = request.BohemiaId },
+                    new ApiModels.CreateSessionRequestDto
+                    {
+                        GameIdentityId = request.GameIdentityId,
+                        Platform = request.Platform,
+                    },
                     cancellationToken: cancellationToken);
 
                 if (session is null)
@@ -27,21 +31,29 @@ public static class SessionEndpoints
                     return Results.Problem("Central API returned an empty session response.");
                 }
 
-                // "unlinked" is the one status with no account behind it: accounts are created by web
-                // signup now, not by joining, so a player Core has never seen gets a LinkPin to enter
-                // on the portal instead. There is nothing to track or report an AccountId for yet.
                 var status = PlayerSessionStatuses.FromCentralApi(session.Status);
 
+                // Core always defaults WebAccountLinked, so a missing value means a response shape this
+                // build does not understand. False is the safe read of that: it only offers the player a
+                // link they may not need, and the prompt has nothing to show unless LinkUrl/LinkPin came
+                // with it.
+                var webAccountLinked = session.WebAccountLinked ?? false;
+
+                // "unlinked" no longer means "a player Core has never seen" — joining now creates the
+                // account. It means Core could not resolve the identity at all (Keycloak unreachable on a
+                // first-ever join) and deliberately created nothing rather than risk a second account for
+                // the same player. So there is nothing to track, and the mod should simply retry.
                 if (session.AccountId is not { } accountId)
                 {
-                    return Results.Ok(new PlayerConnectedResponse(null, status, session.LinkPin, null));
+                    return Results.Ok(new PlayerConnectedResponse(
+                        null, status, webAccountLinked, session.LinkPin, session.LinkUrl, null));
                 }
 
-                // Tracked regardless of status: PlayerSessionTracker means "this Bohemia ID is currently
-                // connected and maps to this AccountId," not "is active". A not-yet-whitelisted (or
-                // blocked) player still gets a tracked session so the mod can read their status and act
-                // on it — and so any later endpoint can resolve the AccountId without re-asking Core.
-                sessions.Start(request.BohemiaId, accountId);
+                // Tracked regardless of status: PlayerSessionTracker means "this Game Identity ID is
+                // currently connected and maps to this AccountId," not "is active". A not-yet-whitelisted
+                // (or blocked) player still gets a tracked session so the mod can read their status and
+                // act on it — and so any later endpoint can resolve the AccountId without re-asking Core.
+                sessions.Start(request.GameIdentityId, accountId);
 
                 // Only an active account reaches the character-select screen, so only then is the list
                 // worth the second call to Core — and it is the call the mod would make next anyway, so
@@ -54,11 +66,12 @@ public static class SessionEndpoints
                     characters = loaded?.Select(CharacterSummary.Create).ToList() ?? [];
                 }
 
-                return Results.Ok(new PlayerConnectedResponse(accountId, status, session.LinkPin, characters));
+                return Results.Ok(new PlayerConnectedResponse(
+                    accountId, status, webAccountLinked, session.LinkPin, session.LinkUrl, characters));
             })
             .Produces<PlayerConnectedResponse>()
             .WithName("PlayerConnected")
-            .WithDescription("Call when a player connects to the server. Resolves the account and starts a Bridge session for it. Status reports what the mod should do: \"active\" carries the player's characters, ready for the character-select screen; \"blocked\" and \"not_whitelisted\" carry none; \"unlinked\" means Core has never seen this Bohemia ID and carries a LinkPin for the player to enter on the web portal, with no AccountId yet.");
+            .WithDescription("Call when a player connects to the server. Resolves (or creates) the account and starts a Bridge session for it. Status is the play gate only: \"active\" carries the player's characters, ready for the character-select screen; \"blocked\" and \"not_whitelisted\" carry none; \"unlinked\" means Core could not resolve the identity right now and created nothing, so retry. WebAccountLinked — not Status — says whether to offer the link: an unlinked player may be perfectly active, and then LinkUrl and LinkPin carry the two ways to link.");
 
         group.MapPost("character-selected", async (
                 CharacterSelectedRequest request,
@@ -74,7 +87,7 @@ public static class SessionEndpoints
                     },
                     _ =>
                     {
-                        sessions.SetActiveCharacter(request.BohemiaId, request.CharacterId);
+                        sessions.SetActiveCharacter(request.GameIdentityId, request.CharacterId);
                         return Results.Ok();
                     });
             })
@@ -89,7 +102,7 @@ public static class SessionEndpoints
                 PlayerSessionTracker sessions,
                 CancellationToken cancellationToken) =>
             {
-                var session = sessions.End(request.BohemiaId);
+                var session = sessions.End(request.GameIdentityId);
 
                 if (session?.ActiveCharacterId is { } characterId)
                 {
@@ -113,18 +126,46 @@ public static class SessionEndpoints
     }
 }
 
-public sealed record PlayerConnectedRequest(Guid BohemiaId);
+/// <param name="GameIdentityId">
+/// The player's per-platform Game Identity ID, as the gameserver reports it — <b>not</b> their
+/// Bohemia account, which is the web identity they may link later. One player on PC, Xbox and
+/// PlayStation has three of these, and all three can end up on one account.
+/// </param>
+/// <param name="Platform">
+/// Optional: "Pc", "Xbox" or "PlayStation". Descriptive only — Core records it on the link for
+/// staff and nothing keys on it — so the mod may omit it, and Core ignores a value it does not
+/// recognise rather than rejecting the join.
+/// </param>
+public sealed record PlayerConnectedRequest(Guid GameIdentityId, string? Platform = null);
 
 /// <summary>
 /// <paramref name="AccountId"/> and <paramref name="Characters"/> are null when there is no account
-/// to speak of — Status "unlinked" — and <paramref name="LinkPin"/> is set only in that case.
-/// <paramref name="Characters"/> is also null for "blocked" and "not_whitelisted": those players
-/// never reach character select, so the list is not fetched rather than fetched and discarded.
+/// to speak of — Status "unlinked", which now means Core could not resolve the identity rather than
+/// that the player is new. <paramref name="Characters"/> is also null for "blocked" and
+/// "not_whitelisted": those players never reach character select, so the list is not fetched rather
+/// than fetched and discarded.
 /// </summary>
+/// <param name="WebAccountLinked">
+/// Whether this account already has a web identity. This, not <paramref name="Status"/>, is what
+/// the mod should branch on to show the link prompt — a player who has never linked still plays
+/// normally, and reads <c>active</c>.
+/// </param>
+/// <param name="LinkPin">
+/// The 8-character PIN for a player who would rather type it into the portal. Set together with
+/// <paramref name="LinkUrl"/>, and both null once linked — or when Keycloak declined to mint one,
+/// in which case the player just rejoins.
+/// </param>
+/// <param name="LinkUrl">
+/// The URL that does the whole linking flow in a browser, PIN prefilled. It is a bearer credential
+/// for this game identity for as long as the PIN lives, so the mod should show it on demand (and
+/// offer copy-to-clipboard) rather than leaving it on screen.
+/// </param>
 public sealed record PlayerConnectedResponse(
     Guid? AccountId,
     PlayerSessionStatus Status,
+    bool WebAccountLinked,
     string? LinkPin,
+    string? LinkUrl,
     IReadOnlyList<CharacterSummary>? Characters);
 
 /// <summary>
@@ -147,6 +188,10 @@ public enum PlayerSessionStatus
 
     [JsonStringEnumMemberName("not_whitelisted")] NotWhitelisted,
 
+    /// <summary>
+    /// Not "this player is new" — Core could not resolve the identity and created nothing, so the mod
+    /// should retry. A genuinely new player gets an account and a playable status.
+    /// </summary>
     [JsonStringEnumMemberName("unlinked")] Unlinked,
 }
 
@@ -167,6 +212,6 @@ public static class PlayerSessionStatuses
     };
 }
 
-public sealed record PlayerDisconnectedRequest(Guid BohemiaId);
+public sealed record PlayerDisconnectedRequest(Guid GameIdentityId);
 
-public sealed record CharacterSelectedRequest(Guid BohemiaId, Guid CharacterId);
+public sealed record CharacterSelectedRequest(Guid GameIdentityId, Guid CharacterId);

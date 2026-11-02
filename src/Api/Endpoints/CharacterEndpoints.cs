@@ -17,7 +17,7 @@ public static class CharacterEndpoints
                 PlayerSessionTracker sessions,
                 CancellationToken cancellationToken) =>
             {
-                var resolution = sessions.ResolveAccountId(request.BohemiaId);
+                var resolution = sessions.ResolveAccountId(request.GameIdentityId);
                 if (resolution.Error is not null)
                 {
                     return resolution.Error;
@@ -38,12 +38,12 @@ public static class CharacterEndpoints
             .WithDescription("Creates a new character for the connected player.");
 
         group.MapGet("characters", async (
-                Guid bohemiaId,
+                Guid gameIdentityId,
                 EliferpgApiClient apiClient,
                 PlayerSessionTracker sessions,
                 CancellationToken cancellationToken) =>
             {
-                var resolution = sessions.ResolveAccountId(bohemiaId);
+                var resolution = sessions.ResolveAccountId(gameIdentityId);
                 if (resolution.Error is not null)
                 {
                     return resolution.Error;
@@ -61,7 +61,7 @@ public static class CharacterEndpoints
     }
 }
 
-public sealed record CreateCharacterRequest(Guid BohemiaId, string Name);
+public sealed record CreateCharacterRequest(Guid GameIdentityId, string Name);
 
 /// <summary>
 /// What the character-select screen needs, and nothing else. Core's CharacterDto also carries
