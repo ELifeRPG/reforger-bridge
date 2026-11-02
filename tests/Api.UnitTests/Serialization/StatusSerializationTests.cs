@@ -57,11 +57,52 @@ public sealed class StatusSerializationTests
     public void PlayerConnectedResponse_SerializesStatusAsAStringNotAnInteger()
     {
         var json = JsonSerializer.Serialize(
-            new PlayerConnectedResponse(null, PlayerSessionStatus.Unlinked, "9EA6H5J6", null),
+            new PlayerConnectedResponse(null, PlayerSessionStatus.Unlinked, false, "9EA6H5J6", null, null),
             Options());
 
         Assert.Contains("\"status\":\"unlinked\"", json);
         Assert.DoesNotContain("\"status\":3", json);
+    }
+
+    /// <summary>
+    /// The link offer is the one part of this response the mod branches on without a status to go by,
+    /// so the three fields it reads are pinned by name. Note <c>active</c> together with
+    /// <c>webAccountLinked: false</c>: that combination is the normal join-first state, not an error,
+    /// and a mod keying the prompt off <c>status</c> instead would never show it.
+    /// </summary>
+    [Fact]
+    public void PlayerConnectedResponse_CarriesTheLinkOfferAnActivePlayerCanStillNeed()
+    {
+        var json = JsonSerializer.Serialize(
+            new PlayerConnectedResponse(
+                Guid.Empty,
+                PlayerSessionStatus.Active,
+                WebAccountLinked: false,
+                LinkPin: "9EA6H5J6",
+                LinkUrl: "https://id.eliferpg.de/realms/eliferpg/protocol/openid-connect/auth?link_pin=9EA6H5J6",
+                Characters: []),
+            Options());
+
+        Assert.Contains("\"status\":\"active\"", json);
+        Assert.Contains("\"webAccountLinked\":false", json);
+        Assert.Contains("\"linkPin\":\"9EA6H5J6\"", json);
+        Assert.Contains("\"linkUrl\":\"https://id.eliferpg.de", json);
+    }
+
+    /// <summary>
+    /// Enfusion reads bools as 1/0, so a bool that serialized as <c>true</c>/<c>false</c> here but
+    /// came back as something else would be a silent mod-side break. Pinned because
+    /// <see cref="EnfusionBooleanConverter"/> sits in these very options for the request direction.
+    /// </summary>
+    [Fact]
+    public void PlayerConnectedResponse_WritesWebAccountLinkedAsAJsonBoolean()
+    {
+        var json = JsonSerializer.Serialize(
+            new PlayerConnectedResponse(Guid.Empty, PlayerSessionStatus.Active, true, null, null, []),
+            Options());
+
+        Assert.Contains("\"webAccountLinked\":true", json);
+        Assert.DoesNotContain("\"webAccountLinked\":1", json);
     }
 
     [Theory]

@@ -44,14 +44,31 @@ integration is separate, later work):
 ```sh
 curl -X POST http://localhost:5200/player-connected \
   -H "Content-Type: application/json" \
-  -d '{"bohemiaId":"11111111-1111-1111-1111-111111111111"}'
+  -d '{"gameIdentityId":"11111111-1111-1111-1111-111111111111","platform":"Pc"}'
 ```
 
-This exercises the full chain: Bridge → Central API (creates the account + a real Keycloak user,
-if new). It also records, Bridge-locally (`PlayerSessionTracker`, in-memory, lost on Bridge
-restart), that this Bohemia ID is connected and which `AccountId` it maps to — every other
-mod-facing endpoint that needs an `AccountId` (character listing and creation) resolves it from
-this tracked session rather than requiring the mod to know or pass it around.
+`gameIdentityId` is the player's **per-platform** Game Identity ID, which is what the gameserver
+reports — not their Bohemia account. One player on PC, Xbox and PlayStation has three of them, and
+all three can be linked to a single ELifeRPG account. `platform` is optional and descriptive only;
+Core records it on the link for staff and ignores a value it does not recognise.
+
+This exercises the full chain: Bridge → Central API, which creates the account if this identity is
+new — joining is enough to play, no web signup required. It also records, Bridge-locally
+(`PlayerSessionTracker`, in-memory, lost on Bridge restart), that this Game Identity ID is connected
+and which `AccountId` it maps to — every other mod-facing endpoint that needs an `AccountId`
+(character listing and creation) resolves it from this tracked session rather than requiring the mod
+to know or pass it around.
+
+### Offering the web link
+
+`player-connected` answers with `webAccountLinked`, and `linkPin` + `linkUrl` when it is `false`.
+**That flag, not `status`, is what the mod branches on to offer linking** — a player who has never
+touched the web portal still reads `active` and plays normally. `linkUrl` does the whole flow in a
+browser with the PIN prefilled; `linkPin` is the same thing for a player who would rather type eight
+characters into the portal. Both are null once linked.
+
+`linkUrl` is a bearer credential for that game identity for as long as the PIN lives, so the mod
+should show it on demand — ideally copy-to-clipboard — rather than parking it on screen.
 
 Whitelist applications are **not** submitted through the Bridge. The Central API derives the
 account from the caller's own Keycloak subject (`account:self:manage`), which a gameserver's
@@ -59,15 +76,19 @@ client-credentials token does not carry — accepting an `accountId` there previ
 of the gameserver whitelist scope apply on someone else's behalf, and that was deliberately closed.
 Players apply through the web portal instead, before or after ever joining the gameserver.
 
-If the account is blocked, `player-connected` still returns `200`, but with `"status": "blocked"`
-and no Bridge-local session recorded.
+If the account is blocked, `player-connected` still returns `200`, but with `"status": "blocked"`.
+A session *is* tracked for it, as for `not_whitelisted` — tracking means "this identity is connected
+and maps to this account", not "may play". The one status with no session behind it is `unlinked`,
+which no longer means "a player we have never seen": it means Core could not resolve the identity at
+all (Keycloak unreachable on a first-ever join) and deliberately created nothing rather than risk a
+second account for the same player, so the mod should retry.
 
 Character sessions are a separate, later moment — `POST character-selected`
-(`{"bohemiaId": "...", "characterId": "..."}`), fired once the player actually picks a character
+(`{"gameIdentityId": "...", "characterId": "..."}`), fired once the player actually picks a character
 at the in-game character-select screen, starts that character's session **in the Central API**.
-`POST player-disconnected` (`{"bohemiaId": "..."}`) ends both: it clears the Bridge-local
-connection record and ends whatever character session was last selected for that Bohemia ID (if
-any) in the Central API.
+`POST player-disconnected` (`{"gameIdentityId": "..."}`) ends both: it clears the Bridge-local
+connection record and ends whatever character session was last selected for that Game Identity ID
+(if any) in the Central API.
 
 ## Proxy endpoints
 
