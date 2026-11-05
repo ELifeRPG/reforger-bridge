@@ -217,11 +217,16 @@ public sealed record PhoneMessage(Guid MessageId, string From, string Body, Date
         source.IsOutbound ?? false);
 }
 
+/// <summary>
+/// <paramref name="LastMessage"/> is the thread's newest message, for the inbox's one-line preview, so
+/// the list never needs a detail call per thread. Null only for a thread with no retained message.
+/// </summary>
 public sealed record MessageThreadSummary(
     Guid ThreadId,
     IReadOnlyList<string> Participants,
     int UnreadCount,
-    DateTimeOffset LastMessageAt)
+    DateTimeOffset LastMessageAt,
+    PhoneMessage? LastMessage)
 {
     public static MessageThreadSummary Create(ApiModels.MessageThreadSummaryDto source) => new(
         source.Id!.Value,
@@ -229,7 +234,8 @@ public sealed record MessageThreadSummary(
         // UnreadCount crosses as an UntypedNode, not an int — see UntypedNodeExtensions for why
         // .GetValue() cannot be called on it directly.
         source.UnreadCount?.ToInt32() ?? 0,
-        source.LastMessageAt!.Value);
+        source.LastMessageAt!.Value,
+        source.LastMessage is null ? null : PhoneMessage.Create(source.LastMessage));
 }
 
 public sealed record MessageThreadDetail(
