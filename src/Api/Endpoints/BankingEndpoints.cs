@@ -11,28 +11,6 @@ public static class BankingEndpoints
     {
         var group = app.MapGroup("").WithTags("Banking");
 
-        group.MapPost("banks", async (
-                OpenBankRequest request,
-                EliferpgApiClient apiClient,
-                CancellationToken cancellationToken) =>
-            {
-                var bank = await apiClient.Api.Banks.PostAsync(
-                    new ApiModels.OpenBankRequestDto
-                    {
-                        Name = request.Name,
-                        TransactionFeeBase = new UntypedDecimal(request.TransactionFeeBase),
-                        TransactionFeeMultiplier = new UntypedDecimal(request.TransactionFeeMultiplier),
-                    },
-                    cancellationToken: cancellationToken);
-
-                return bank is null
-                    ? Results.Problem("Central API returned an empty bank response.")
-                    : Results.Ok(BankSummary.Create(bank));
-            })
-            .Produces<BankSummary>()
-            .WithName("OpenBank")
-            .WithDescription("Opens a new bank.");
-
         group.MapGet("banks", async (EliferpgApiClient apiClient, CancellationToken cancellationToken) =>
             {
                 var banks = await apiClient.Api.Banks.GetAsync(cancellationToken: cancellationToken);
@@ -84,11 +62,17 @@ public static class BankingEndpoints
             .WithName("ListCompanyBankAccounts")
             .WithDescription("Lists a company's corporate bank accounts.");
 
-        group.MapGet("bank-accounts/{bankAccountId:guid}", async (
-                Guid bankAccountId,
+        group.MapGet("bank-accounts/{number}", async (
+                string number,
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
+                var (bankAccountId, problem) = await ResolveAsync(apiClient, number, "Bank account not found", cancellationToken);
+                if (problem is not null)
+                {
+                    return problem;
+                }
+
                 return await ApiCallExtensions.ExecuteAsync(
                     () => apiClient.Api.BankAccounts[bankAccountId].GetAsync(cancellationToken: cancellationToken),
                     account => account is null
@@ -96,30 +80,44 @@ public static class BankingEndpoints
                         : Results.Ok(BankAccountSummary.Create(account)));
             })
             .Produces<BankAccountSummary>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithName("GetBankAccount")
             .WithDescription("Gets bank account details.");
 
-        group.MapGet("bank-accounts/{bankAccountId:guid}/transactions", async (
-                Guid bankAccountId,
+        group.MapGet("bank-accounts/{number}/transactions", async (
+                string number,
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
+                var (bankAccountId, problem) = await ResolveAsync(apiClient, number, "Bank account not found", cancellationToken);
+                if (problem is not null)
+                {
+                    return problem;
+                }
+
                 return await ApiCallExtensions.ExecuteAsync(
                     () => apiClient.Api.BankAccounts[bankAccountId].Transactions.GetAsync(cancellationToken: cancellationToken),
                     transactions => Results.Ok(transactions?.Select(BankAccountTransaction.Create).ToList() ?? []));
             })
             .Produces<IEnumerable<BankAccountTransaction>>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithName("ListBankAccountTransactions")
             .WithDescription("Lists a bank account's most recent transactions (deposits, withdrawals, transfers), newest first.");
 
-        group.MapPut("bank-accounts/{bankAccountId:guid}/deposit", async (
-                Guid bankAccountId,
+        group.MapPut("bank-accounts/{number}/deposit", async (
+                string number,
                 DepositRequest request,
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
+                var (bankAccountId, problem) = await ResolveAsync(apiClient, number, "Bank account not found", cancellationToken);
+                if (problem is not null)
+                {
+                    return problem;
+                }
+
                 return await ApiCallExtensions.ExecuteAsync(
                     () => apiClient.Api.BankAccounts[bankAccountId].Deposit.PutAsync(
                         new ApiModels.DepositRequestDto { Amount = new UntypedDecimal(request.Amount) },
@@ -129,17 +127,24 @@ public static class BankingEndpoints
                         : Results.Ok(TransactionResult.Create(result)));
             })
             .Produces<TransactionResult>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .WithName("DepositToBankAccount")
             .WithDescription("Deposits cash into a bank account.");
 
-        group.MapPut("bank-accounts/{bankAccountId:guid}/withdraw", async (
-                Guid bankAccountId,
+        group.MapPut("bank-accounts/{number}/withdraw", async (
+                string number,
                 WithdrawRequest request,
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
+                var (bankAccountId, problem) = await ResolveAsync(apiClient, number, "Bank account not found", cancellationToken);
+                if (problem is not null)
+                {
+                    return problem;
+                }
+
                 return await ApiCallExtensions.ExecuteAsync(
                     () => apiClient.Api.BankAccounts[bankAccountId].Withdraw.PutAsync(
                         new ApiModels.WithdrawRequestDto { Amount = new UntypedDecimal(request.Amount), CharacterId = request.CharacterId },
@@ -149,25 +154,39 @@ public static class BankingEndpoints
                         : Results.Ok(TransactionResult.Create(result)));
             })
             .Produces<TransactionResult>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .WithName("WithdrawFromBankAccount")
             .WithDescription("Withdraws cash from a bank account, e.g. for an ATM.");
 
-        group.MapPut("bank-accounts/{bankAccountId:guid}/transaction", async (
-                Guid bankAccountId,
+        group.MapPut("bank-accounts/{number}/transaction", async (
+                string number,
                 TransferRequest request,
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
+                var (bankAccountId, problem) = await ResolveAsync(apiClient, number, "Bank account not found", cancellationToken);
+                if (problem is not null)
+                {
+                    return problem;
+                }
+
+                var (targetBankAccountId, targetProblem) = await ResolveAsync(
+                    apiClient, request.TargetNumber, "Target bank account not found", cancellationToken);
+                if (targetProblem is not null)
+                {
+                    return targetProblem;
+                }
+
                 return await ApiCallExtensions.ExecuteAsync(
                     () => apiClient.Api.BankAccounts[bankAccountId].Transaction.PutAsync(
                         new ApiModels.TransferRequestDto
                         {
                             Amount = new UntypedDecimal(request.Amount),
                             CharacterId = request.CharacterId,
-                            TargetBankAccountId = request.TargetBankAccountId,
+                            TargetBankAccountId = targetBankAccountId,
                         },
                         cancellationToken: cancellationToken),
                     result => result is null
@@ -175,27 +194,69 @@ public static class BankingEndpoints
                         : Results.Ok(TransactionResult.Create(result)));
             })
             .Produces<TransactionResult>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .WithName("TransferBankAccountFunds")
-            .WithDescription("Transfers cash to another bank account.");
+            .WithDescription("Transfers cash to another bank account, given its account number as the player typed it (spaces and letter case are ignored).");
 
         return app;
     }
+
+    /// <summary>
+    /// The mod addresses accounts by their number; the Central API by id. Resolves one to the other
+    /// through the Central API's number filter, which rejects a bad layout or bad check digits (400)
+    /// before any lookup. A valid number nobody holds comes back as an empty list, answered here as
+    /// a 404 with <paramref name="notFoundTitle"/> so a transfer can say which side was missing.
+    /// </summary>
+    private static async Task<(Guid BankAccountId, IResult? Problem)> ResolveAsync(
+        EliferpgApiClient apiClient,
+        string number,
+        string notFoundTitle,
+        CancellationToken cancellationToken)
+    {
+        List<ApiModels.BankAccountLookupDto>? matches;
+        try
+        {
+            matches = await apiClient.Api.BankAccounts.GetAsync(
+                configuration => configuration.QueryParameters.Number = number,
+                cancellationToken);
+        }
+        catch (ApiModels.ProblemDetails problem)
+        {
+            return (Guid.Empty, Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode));
+        }
+
+        return BankAccountLookup.SingleId(matches) is { } bankAccountId
+            ? (bankAccountId, null)
+            : (Guid.Empty, Results.Problem(title: notFoundTitle, statusCode: StatusCodes.Status404NotFound));
+    }
 }
 
-public sealed record BankSummary(Guid BankId, string Name, decimal TransactionFeeBase, decimal TransactionFeeMultiplier)
+public static class BankAccountLookup
+{
+    /// <summary>The account id from a number lookup, or null when no account holds the number.</summary>
+    public static Guid? SingleId(IReadOnlyList<ApiModels.BankAccountLookupDto>? matches)
+        => matches is [{ BankAccountId: { } bankAccountId }] ? bankAccountId : null;
+}
+
+/// <summary>Code is the four letters embedded in every account number the bank issues.</summary>
+public sealed record BankSummary(Guid BankId, string Name, string Code, decimal TransactionFeeBase, decimal TransactionFeeMultiplier)
 {
     public static BankSummary Create(ApiModels.BankDto source) => new(
         source.BankId!.Value,
         source.Name!,
+        source.Code!,
         source.TransactionFeeBase!.ToDecimal(),
         source.TransactionFeeMultiplier!.ToDecimal());
 }
 
+/// <summary>
+/// Carries no account id: the mod addresses accounts by Number (compact, e.g. EL90FEBK0123456789;
+/// group it in fours for display), and the Bridge resolves it to the Central API's id.
+/// </summary>
 public sealed record BankAccountSummary(
-    Guid BankAccountId,
     Guid BankId,
     string Number,
     string Type,
@@ -204,7 +265,6 @@ public sealed record BankAccountSummary(
     decimal Balance)
 {
     public static BankAccountSummary Create(ApiModels.BankAccountDto source) => new(
-        source.BankAccountId!.Value,
         source.BankId!.Value,
         source.Number!,
         source.Type!,
@@ -212,8 +272,6 @@ public sealed record BankAccountSummary(
         source.CompanyId,
         source.Balance!.ToDecimal());
 }
-
-public sealed record OpenBankRequest(string Name, decimal TransactionFeeBase, decimal TransactionFeeMultiplier);
 
 public sealed record BankAccountTransaction(
     string Kind,
@@ -236,7 +294,8 @@ public sealed record DepositRequest(decimal Amount);
 
 public sealed record WithdrawRequest(decimal Amount, Guid CharacterId);
 
-public sealed record TransferRequest(decimal Amount, Guid CharacterId, Guid TargetBankAccountId);
+/// <summary>TargetNumber is the recipient's account number as the player typed it.</summary>
+public sealed record TransferRequest(decimal Amount, Guid CharacterId, string TargetNumber);
 
 public sealed record TransactionResult(decimal Amount, decimal Fee, decimal NewBalance)
 {
