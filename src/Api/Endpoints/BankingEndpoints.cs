@@ -273,12 +273,13 @@ public sealed record BankAccountSummary(
         source.Balance!.ToDecimal());
 }
 
+/// <summary>CounterpartyNumber is the other account's number for a transfer; null otherwise.</summary>
 public sealed record BankAccountTransaction(
     string Kind,
     decimal Amount,
     decimal Fee,
     Guid? ActingCharacterId,
-    Guid? CounterpartyBankAccountId,
+    string? CounterpartyNumber,
     DateTimeOffset OccurredAt)
 {
     public static BankAccountTransaction Create(ApiModels.BankAccountTransactionDto source) => new(
@@ -286,7 +287,7 @@ public sealed record BankAccountTransaction(
         source.Amount!.ToDecimal(),
         source.Fee!.ToDecimal(),
         source.ActingCharacterId,
-        source.CounterpartyBankAccountId,
+        source.CounterpartyNumber,
         source.OccurredAt!.Value);
 }
 

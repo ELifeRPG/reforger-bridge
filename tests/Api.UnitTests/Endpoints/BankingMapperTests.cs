@@ -79,4 +79,29 @@ public sealed class BankingMapperTests
             typeof(BankAccountSummary).GetProperties(),
             property => property.Name == nameof(ApiModels.BankAccountDto.BankAccountId));
     }
+
+    [Fact]
+    public void BankAccountTransaction_Create_CarriesTheCounterpartyNumberNotItsId()
+    {
+        var actingCharacterId = Guid.NewGuid();
+        var occurredAt = DateTimeOffset.UtcNow;
+
+        var transaction = BankAccountTransaction.Create(new ApiModels.BankAccountTransactionDto
+        {
+            Kind = "TransferredOut",
+            Amount = new UntypedDecimal(7m),
+            Fee = new UntypedDecimal(0.34m),
+            ActingCharacterId = actingCharacterId,
+            CounterpartyBankAccountId = Guid.NewGuid(),
+            CounterpartyNumber = "EL22FEBK6848015120",
+            OccurredAt = occurredAt,
+        });
+
+        Assert.Equal(
+            new BankAccountTransaction("TransferredOut", 7m, 0.34m, actingCharacterId, "EL22FEBK6848015120", occurredAt),
+            transaction);
+        Assert.DoesNotContain(
+            typeof(BankAccountTransaction).GetProperties(),
+            property => property.Name == nameof(ApiModels.BankAccountTransactionDto.CounterpartyBankAccountId));
+    }
 }

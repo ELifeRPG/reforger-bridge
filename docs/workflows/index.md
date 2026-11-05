@@ -42,7 +42,7 @@ endpoints in particular take a `gameIdentityId`, not an `AccountId` — resolved
 number (`bank-accounts/EL90FEBK0123456789/deposit`), and a transfer's `targetNumber` takes it as
 the player typed it (spaces and letter case are ignored). The Bridge resolves each number through
 the Central API's `GET bank-accounts?number=`, which rejects a bad layout or bad check digits (400)
-before any lookup. A valid number nobody holds is a 404. Account summaries carry the number and
-never the id. These aren't documented page-by-page here — see
+before any lookup. A valid number nobody holds is a 404. Account summaries and transaction history
+(`counterpartyNumber`) carry numbers and never ids. These aren't documented page-by-page here — see
 `/docs` (Scalar UI, dev-only) or `/openapi/v1.json` on a running Bridge instance for the current,
 always-accurate route list.
