@@ -182,3 +182,30 @@ uv run zensical serve -f zensical.yml
 
 For the shared, project-wide documentation site (architecture across all ELifeRPG repos), see
 [ELifeRPG/docs](https://github.com/ELifeRPG/docs).
+
+## License
+
+Copyright © 2026 ELifeRPG contributors.
+
+Licensed under the [GNU Affero General Public License v3.0 or later](LICENSE)
+(`AGPL-3.0-or-later`). You may use, change and share this software. If you
+distribute it, or run a modified version for other people over a network
+(for example, a game server), you must make your complete source code
+available to those users under the same license.
+
+Contributions need a DCO sign-off; see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Additional permission for the API description
+
+As an additional permission under section 7 of the GNU AGPL v3, the
+copyright holders of this program allow you to use, copy, modify and
+distribute, under terms of your choice:
+
+- the OpenAPI description of this program's HTTP API (the document the
+  program generates and serves), and
+- any code generated from that description, such as API clients
+  (including the Enforce Script client in the ELifeRPG mod).
+
+This permission covers only those two things. The rest of this program
+stays under the AGPL. You may remove this permission from modified versions
+you distribute.
