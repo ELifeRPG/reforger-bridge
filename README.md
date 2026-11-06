@@ -150,6 +150,21 @@ Simulation Module): its own repo, own solution, consuming the Central API only t
 generated client — now via the shared `backend-api-client-dotnet` package rather than its own
 Kiota generation. See `eliferpg-core`'s `ARCHITECTURE.md` §3.2/§9b/§9c for the full picture.
 
+## Releasing
+
+Binaries and images are released separately, so a .NET runtime or OS patch can ship without a new
+release of this code.
+
+1. A maintainer runs the **Release** workflow (Actions → Release → Run workflow, on `main`) and picks
+   `patch`, `minor` or `major`. It builds and tests `main`, tags it `vX.Y.Z`, and attaches one
+   framework-dependent publish per deployable (`reforger-bridge-<name>-X.Y.Z.tar.gz`) to a GitHub release.
+2. [`ELifeRPG/reforger-bridge-container`](https://github.com/ELifeRPG/reforger-bridge-container) turns that release into
+   `ghcr.io/eliferpg/reforger-bridge:latest` (and `:X.Y.Z`). Renovate opens a PR there for every new release and every
+   new `aspnet` runtime image, and the image is pushed once that PR's smoke test passes and it is merged.
+
+Every push to `main` here still builds `ghcr.io/eliferpg/reforger-bridge:edge` (and `:sha-<commit>`) from source for dev use.
+`:latest` only ever carries a release.
+
 ## Documentation site
 
 The in-repo `docs/` directory is the source for the rendered site; it's built with
