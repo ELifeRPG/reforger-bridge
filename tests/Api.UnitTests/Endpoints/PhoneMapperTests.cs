@@ -94,6 +94,44 @@ public sealed class PhoneMapperTests
     }
 
     [Fact]
+    public void MessageThreadSummary_Create_CarriesTheLastMessageForThePreview()
+    {
+        var messageId = Guid.NewGuid();
+        var sentAt = DateTimeOffset.UnixEpoch.AddMinutes(5);
+
+        var summary = MessageThreadSummary.Create(new ApiModels.MessageThreadSummaryDto
+        {
+            Id = Guid.NewGuid(),
+            Participants = ["12345678"],
+            UnreadCount = new UntypedInteger(1),
+            LastMessageAt = sentAt,
+            LastMessage = new ApiModels.MessageDto
+            {
+                Id = messageId,
+                From = "12345678",
+                Body = "on my way",
+                SentAt = sentAt,
+                IsOutbound = false,
+            },
+        });
+
+        Assert.Equal(new PhoneMessage(messageId, "12345678", "on my way", sentAt, IsOutbound: false), summary.LastMessage);
+    }
+
+    [Fact]
+    public void MessageThreadSummary_Create_WithNoLastMessage_LeavesItNull()
+    {
+        var summary = MessageThreadSummary.Create(new ApiModels.MessageThreadSummaryDto
+        {
+            Id = Guid.NewGuid(),
+            LastMessageAt = DateTimeOffset.UnixEpoch,
+            LastMessage = null,
+        });
+
+        Assert.Null(summary.LastMessage);
+    }
+
+    [Fact]
     public void MessageUpdates_Create_CarriesTheSequencesAndOnlyTheNewMessages()
     {
         var sentAt = DateTimeOffset.UnixEpoch.AddMinutes(5);
