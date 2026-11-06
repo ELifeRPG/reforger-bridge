@@ -1,0 +1,114 @@
+name: Release
+
+# Cuts a versioned release of the deployable binaries: tags main as vX.Y.Z and attaches one
+# framework-dependent publish tarball per deployable (reforger-bridge-<name>-X.Y.Z.tar.gz).
+#
+# The images are not built here. ELifeRPG/reforger-bridge-container picks the release up through
+# Renovate and layers it onto the current .NET runtime, so runtime updates ship without a new release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which part of the version to bump
+        type: choice
+        options: [patch, minor, major]
+        required: true
+
+concurrency: release
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Same image as ci.yml and .devcontainer/Dockerfile's base.
+    container: mcr.microsoft.com/devcontainers/dotnet:2.1.4-11.0-preview
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          latest_tag="$(git tag --list 'v*' --sort=-v:refname | head -n1)"
+          latest="${latest_tag#v}"
+          IFS='.' read -r major minor patch <<< "${latest:-0.0.0}"
+          case "$BUMP" in
+            major) next="$((major + 1)).0.0" ;;
+            minor) next="${major}.$((minor + 1)).0" ;;
+            patch) next="${major}.${minor}.$((patch + 1))" ;;
+          esac
+          echo "Releasing $next (previous: ${latest_tag:-none})"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to GitHub Packages
+        run: >
+          dotnet nuget update source eliferpg-github
+          --username ${{ github.actor }}
+          --password ${{ secrets.GITHUB_TOKEN }}
+          --store-password-in-clear-text
+          --configfile NuGet.config
+
+      - name: Restore
+        run: dotnet restore ELifeRPG.Bridge.slnx
+
+      - name: Build
+        run: dotnet build ELifeRPG.Bridge.slnx --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test ELifeRPG.Bridge.slnx --no-build --configuration Release
+
+      # One "name:project" pair per deployable; each becomes reforger-bridge-<name>-<version>.tar.gz
+      # and gets its own Dockerfile in reforger-bridge-container.
+      - name: Publish deployables
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for pair in api:src/Api/Api.csproj; do
+            name="${pair%%:*}"
+            project="${pair#*:}"
+            dotnet publish "$project" --configuration Release --no-restore --output "out/$name" \
+              -p:Version="$VERSION"
+            tar -czf "dist/reforger-bridge-$name-$VERSION.tar.gz" -C "out/$name" .
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: >
+          gh release create "v$VERSION" dist/*
+          --repo "$GITHUB_REPOSITORY"
+          --target "$GITHUB_SHA"
+          --title "v$VERSION"
+          --generate-notes
