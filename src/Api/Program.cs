@@ -3,6 +3,7 @@ using ELifeRPG.Bridge.Api;
 using ELifeRPG.Bridge.Api.Authentication;
 using ELifeRPG.Bridge.Api.Configuration;
 using ELifeRPG.Bridge.Api.Endpoints;
+using ELifeRPG.Bridge.Api.Extensions;
 using ELifeRPG.Bridge.Api.OpenApi;
 using ELifeRPG.Bridge.Api.Serialization;
 using ELifeRPG.Bridge.Api.Services;
@@ -39,18 +40,13 @@ builder.Services.AddSingleton<BridgeTokenProvider>(serviceProvider =>
     return new BridgeTokenProvider(httpClient, options);
 });
 
-builder.Services
-    .AddHttpClient("Backend", (serviceProvider, client) =>
-    {
-        client.BaseAddress = new Uri(builder.Configuration["Backend:BaseUrl"]!);
-    })
-    .AddStandardResilienceHandler();
+builder.Services.AddBackendHttpClient(new Uri(builder.Configuration["Backend:BaseUrl"]!));
 
 builder.Services.AddSingleton<EliferpgApiClient>(serviceProvider =>
 {
     var tokenProvider = serviceProvider.GetRequiredService<BridgeTokenProvider>();
     var authProvider = new BaseBearerTokenAuthenticationProvider(tokenProvider);
-    var httpClient = serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient("Backend");
+    var httpClient = serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(BackendHttpClientExtensions.ClientName);
     var adapter = new HttpClientRequestAdapter(authProvider, httpClient: httpClient)
     {
         BaseUrl = builder.Configuration["Backend:BaseUrl"],
