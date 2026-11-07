@@ -286,21 +286,21 @@ public static class BankAccountLookup
 }
 
 /// <summary>Code is the four letters embedded in every account number the bank issues.</summary>
-public sealed record BankSummary(Guid BankId, string Name, string Code, decimal TransactionFeeBase, decimal TransactionFeeMultiplier)
+/// <summary>FeeTermsStr is the bank's current fee terms as display text (see <see cref="Money.FormatFeeTerms"/>).</summary>
+public sealed record BankSummary(Guid BankId, string Name, string Code, string FeeTermsStr)
 {
     public static BankSummary Create(ApiModels.BankDto source) => new(
         source.BankId!.Value,
         source.Name!,
         source.Code!,
-        source.TransactionFeeBase!.ToDecimal(),
-        source.TransactionFeeMultiplier!.ToDecimal());
+        Money.FormatFeeTerms(source.TransactionFeeBase!.ToDecimal(), source.TransactionFeeMultiplier!.ToDecimal()));
 }
 
 /// <summary>
 /// Carries no account id: the mod addresses accounts by Number (compact, e.g. EL90FEBK0123456789;
 /// group it in fours for display), and the Bridge resolves it to the Central API's id. Money goes to
-/// the mod as display text only (see <see cref="Money"/>). The fee terms are the ones copied when the
-/// account was opened, which are what it is charged; they stay numbers for the ATM's fee preview.
+/// the mod as display text only (see <see cref="Money"/>), including FeeTermsStr: the fee terms copied
+/// when the account was opened, which are the ones it is charged.
 /// </summary>
 public sealed record BankAccountSummary(
     Guid BankId,
@@ -309,8 +309,7 @@ public sealed record BankAccountSummary(
     Guid? CharacterId,
     Guid? CompanyId,
     string BalanceStr,
-    decimal TransactionFeeBase,
-    decimal TransactionFeeMultiplier)
+    string FeeTermsStr)
 {
     public static BankAccountSummary Create(ApiModels.BankAccountDto source) => new(
         source.BankId!.Value,
@@ -319,8 +318,7 @@ public sealed record BankAccountSummary(
         source.CharacterId,
         source.CompanyId,
         Money.Format(source.Balance!.ToDecimal()),
-        source.TransactionFeeBase!.ToDecimal(),
-        source.TransactionFeeMultiplier!.ToDecimal());
+        Money.FormatFeeTerms(source.TransactionFeeBase!.ToDecimal(), source.TransactionFeeMultiplier!.ToDecimal()));
 }
 
 /// <summary>
