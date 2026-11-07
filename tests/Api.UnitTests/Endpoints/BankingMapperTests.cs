@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using ELifeRPG.Bridge.Api.Endpoints;
 using Microsoft.Kiota.Abstractions.Serialization;
 using Xunit;
@@ -74,7 +75,7 @@ public sealed class BankingMapperTests
             Balance = new UntypedDecimal(12.5m),
         });
 
-        Assert.Equal(new BankAccountSummary(bankId, "EL90FEBK0123456789", "Personal", characterId, null, 12.5m), summary);
+        Assert.Equal(new BankAccountSummary(bankId, "EL90FEBK0123456789", "Personal", characterId, null, "12.50 Ŧ"), summary);
         Assert.DoesNotContain(
             typeof(BankAccountSummary).GetProperties(),
             property => property.Name == nameof(ApiModels.BankAccountDto.BankAccountId));
@@ -98,10 +99,57 @@ public sealed class BankingMapperTests
         });
 
         Assert.Equal(
-            new BankAccountTransaction("TransferredOut", 7m, 0.34m, actingCharacterId, "EL22FEBK6848015120", occurredAt),
+            new BankAccountTransaction("TransferredOut", "-7.00 Ŧ", "0.34 Ŧ", actingCharacterId, "EL22FEBK6848015120", occurredAt),
             transaction);
         Assert.DoesNotContain(
             typeof(BankAccountTransaction).GetProperties(),
             property => property.Name == nameof(ApiModels.BankAccountTransactionDto.CounterpartyBankAccountId));
+    }
+
+    [Theory]
+    [InlineData("Deposited", "+7.00 Ŧ")]
+    [InlineData("TransferredIn", "+7.00 Ŧ")]
+    [InlineData("Withdrawn", "-7.00 Ŧ")]
+    [InlineData("TransferredOut", "-7.00 Ŧ")]
+    public void BankAccountTransaction_Create_SignsTheAmountByDirection(string kind, string expected)
+    {
+        var transaction = BankAccountTransaction.Create(new ApiModels.BankAccountTransactionDto
+        {
+            Kind = kind,
+            Amount = new UntypedDecimal(7m),
+            Fee = new UntypedDecimal(0m),
+            OccurredAt = DateTimeOffset.UtcNow,
+        });
+
+        Assert.Equal(expected, transaction.AmountStr);
+    }
+
+    [Fact]
+    public void TransactionResult_Create_FormatsEveryFigure()
+    {
+        var result = TransactionResult.Create(new ApiModels.TransactionResultDto
+        {
+            Amount = new UntypedDecimal(1500m),
+            Fee = new UntypedDecimal(30.20m),
+            NewBalance = new UntypedDecimal(-25000000.5m),
+        });
+
+        Assert.Equal(new TransactionResult("1 500.00 Ŧ", "30.20 Ŧ", "-25 000 000.50 Ŧ"), result);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void InvalidAmount_RefusesAnythingBelowOneCent(int amountCents)
+    {
+        var problem = Assert.IsAssignableFrom<IStatusCodeHttpResult>(BankingEndpoints.InvalidAmount(amountCents));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, problem.StatusCode);
+    }
+
+    [Fact]
+    public void InvalidAmount_AcceptsOneCent()
+    {
+        Assert.Null(BankingEndpoints.InvalidAmount(1));
     }
 }
