@@ -97,6 +97,7 @@ builder.Services.ConfigureHttpJsonOptions(options => BridgeJsonOptions.Configure
 builder.Services.AddOpenApi("v1", options => options
     .AddSchemaTransformer<EnumSchemaTransformer>()
     .AddSchemaTransformer<BooleanSchemaTransformer>()
+    .AddSchemaTransformer<ProblemDetailsSchemaTransformer>()
     .AddDocumentTransformer<NullableObjectPropertyTransformer>());
 
 var app = builder.Build();
