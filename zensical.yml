@@ -12,6 +12,7 @@ nav:
   - Workflows:
       - workflows/index.md
       - Login & Session Bootstrap: workflows/login.md
+  - Money: money.md
 
 extra_css:
   - stylesheets/extra.css

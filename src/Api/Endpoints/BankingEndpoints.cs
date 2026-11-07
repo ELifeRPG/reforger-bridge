@@ -1,4 +1,5 @@
 using ELifeRPG.Bridge.Api.Extensions;
+using ELifeRPG.Bridge.Api.Formatting;
 using ELifeRPG.BackendApiClient;
 using Microsoft.Kiota.Abstractions.Serialization;
 using ApiModels = ELifeRPG.BackendApiClient.Models;
@@ -112,6 +113,11 @@ public static class BankingEndpoints
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
+                if (InvalidAmount(request.AmountCents) is { } invalidAmount)
+                {
+                    return invalidAmount;
+                }
+
                 var (bankAccountId, problem) = await ResolveAsync(apiClient, number, "Bank account not found", cancellationToken);
                 if (problem is not null)
                 {
@@ -120,7 +126,7 @@ public static class BankingEndpoints
 
                 return await ApiCallExtensions.ExecuteAsync(
                     () => apiClient.Api.BankAccounts[bankAccountId].Deposit.PutAsync(
-                        new ApiModels.DepositRequestDto { Amount = new UntypedDecimal(request.Amount) },
+                        new ApiModels.DepositRequestDto { Amount = new UntypedDecimal(Money.FromCents(request.AmountCents)) },
                         cancellationToken: cancellationToken),
                     result => result is null
                         ? Results.Problem("Central API returned an empty deposit response.")
@@ -139,6 +145,11 @@ public static class BankingEndpoints
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
+                if (InvalidAmount(request.AmountCents) is { } invalidAmount)
+                {
+                    return invalidAmount;
+                }
+
                 var (bankAccountId, problem) = await ResolveAsync(apiClient, number, "Bank account not found", cancellationToken);
                 if (problem is not null)
                 {
@@ -147,7 +158,7 @@ public static class BankingEndpoints
 
                 return await ApiCallExtensions.ExecuteAsync(
                     () => apiClient.Api.BankAccounts[bankAccountId].Withdraw.PutAsync(
-                        new ApiModels.WithdrawRequestDto { Amount = new UntypedDecimal(request.Amount), CharacterId = request.CharacterId },
+                        new ApiModels.WithdrawRequestDto { Amount = new UntypedDecimal(Money.FromCents(request.AmountCents)), CharacterId = request.CharacterId },
                         cancellationToken: cancellationToken),
                     result => result is null
                         ? Results.Problem("Central API returned an empty withdraw response.")
@@ -167,6 +178,11 @@ public static class BankingEndpoints
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
+                if (InvalidAmount(request.AmountCents) is { } invalidAmount)
+                {
+                    return invalidAmount;
+                }
+
                 var (bankAccountId, problem) = await ResolveAsync(apiClient, number, "Bank account not found", cancellationToken);
                 if (problem is not null)
                 {
@@ -184,7 +200,7 @@ public static class BankingEndpoints
                     () => apiClient.Api.BankAccounts[bankAccountId].Transaction.PutAsync(
                         new ApiModels.TransferRequestDto
                         {
-                            Amount = new UntypedDecimal(request.Amount),
+                            Amount = new UntypedDecimal(Money.FromCents(request.AmountCents)),
                             CharacterId = request.CharacterId,
                             TargetBankAccountId = targetBankAccountId,
                         },
@@ -203,6 +219,15 @@ public static class BankingEndpoints
 
         return app;
     }
+
+    /// <summary>
+    /// The backend refuses these too, but the backend client has no error mapping for that 400, so it
+    /// would reach the mod as a 500. A body without amountCents (e.g. the old decimal "amount") lands here
+    /// as 0.
+    /// </summary>
+    public static IResult? InvalidAmount(int amountCents) => amountCents > 0
+        ? null
+        : Results.Problem(title: "amountCents must be a positive whole number of cents", statusCode: StatusCodes.Status400BadRequest);
 
     /// <summary>
     /// The mod addresses accounts by their number; the Central API by id. Resolves one to the other
@@ -254,7 +279,8 @@ public sealed record BankSummary(Guid BankId, string Name, string Code, decimal 
 
 /// <summary>
 /// Carries no account id: the mod addresses accounts by Number (compact, e.g. EL90FEBK0123456789;
-/// group it in fours for display), and the Bridge resolves it to the Central API's id.
+/// group it in fours for display), and the Bridge resolves it to the Central API's id. Money goes to
+/// the mod as display text only (see <see cref="Money"/>).
 /// </summary>
 public sealed record BankAccountSummary(
     Guid BankId,
@@ -262,7 +288,7 @@ public sealed record BankAccountSummary(
     string Type,
     Guid? CharacterId,
     Guid? CompanyId,
-    decimal Balance)
+    string BalanceStr)
 {
     public static BankAccountSummary Create(ApiModels.BankAccountDto source) => new(
         source.BankId!.Value,
@@ -270,38 +296,50 @@ public sealed record BankAccountSummary(
         source.Type!,
         source.CharacterId,
         source.CompanyId,
-        source.Balance!.ToDecimal());
+        Money.Format(source.Balance!.ToDecimal()));
 }
 
-/// <summary>CounterpartyNumber is the other account's number for a transfer; null otherwise.</summary>
+/// <summary>
+/// CounterpartyNumber is the other account's number for a transfer; null otherwise. AmountStr is signed
+/// from this account's point of view (<c>-</c> for Withdrawn and TransferredOut, <c>+</c> otherwise);
+/// Kind stays for anything else that depends on the direction, such as colour.
+/// </summary>
 public sealed record BankAccountTransaction(
     string Kind,
-    decimal Amount,
-    decimal Fee,
+    string AmountStr,
+    string FeeStr,
     Guid? ActingCharacterId,
     string? CounterpartyNumber,
     DateTimeOffset OccurredAt)
 {
     public static BankAccountTransaction Create(ApiModels.BankAccountTransactionDto source) => new(
         source.Kind!,
-        source.Amount!.ToDecimal(),
-        source.Fee!.ToDecimal(),
+        Money.FormatSigned(source.Amount!.ToDecimal(), IsOutgoing(source.Kind!)),
+        Money.Format(source.Fee!.ToDecimal()),
         source.ActingCharacterId,
         source.CounterpartyNumber,
         source.OccurredAt!.Value);
+
+    private static bool IsOutgoing(string kind) => kind is "Withdrawn" or "TransferredOut";
 }
 
-public sealed record DepositRequest(decimal Amount);
+/// <summary>AmountCents is in whole cents, e.g. 12345 for 123.45.</summary>
+public sealed record DepositRequest(int AmountCents);
 
-public sealed record WithdrawRequest(decimal Amount, Guid CharacterId);
+/// <summary>AmountCents is in whole cents, e.g. 12345 for 123.45.</summary>
+public sealed record WithdrawRequest(int AmountCents, Guid CharacterId);
 
-/// <summary>TargetNumber is the recipient's account number as the player typed it.</summary>
-public sealed record TransferRequest(decimal Amount, Guid CharacterId, string TargetNumber);
+/// <summary>
+/// AmountCents is in whole cents, e.g. 12345 for 123.45. TargetNumber is the recipient's account number
+/// as the player typed it.
+/// </summary>
+public sealed record TransferRequest(int AmountCents, Guid CharacterId, string TargetNumber);
 
-public sealed record TransactionResult(decimal Amount, decimal Fee, decimal NewBalance)
+/// <summary>The booking's figures as display text (see <see cref="Money"/>).</summary>
+public sealed record TransactionResult(string AmountStr, string FeeStr, string NewBalanceStr)
 {
     public static TransactionResult Create(ApiModels.TransactionResultDto source) => new(
-        source.Amount!.ToDecimal(),
-        source.Fee!.ToDecimal(),
-        source.NewBalance!.ToDecimal());
+        Money.Format(source.Amount!.ToDecimal()),
+        Money.Format(source.Fee!.ToDecimal()),
+        Money.Format(source.NewBalance!.ToDecimal()));
 }
