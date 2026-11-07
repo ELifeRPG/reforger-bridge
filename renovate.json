@@ -1,0 +1,29 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommits", "docker:pinDigests"],
+  "packageRules": [
+    {
+      "description": "The backend client is on the private GitHub Packages feed, and each major is a breaking API contract. It is bumped by hand with the API change that needs it.",
+      "matchDatasources": ["nuget"],
+      "matchPackageNames": ["ELifeRPG.**"],
+      "enabled": false
+    },
+    {
+      "description": "global.json pins one .NET preview SDK with rollForward disabled. The SDK, the build/runtime/devcontainer images and the ASP.NET Core packages ship together and have to move together.",
+      "groupName": ".NET SDK and runtime",
+      "matchDatasources": ["dotnet-version", "docker", "nuget"],
+      "matchPackageNames": [
+        "dotnet-sdk",
+        "mcr.microsoft.com/dotnet/**",
+        "mcr.microsoft.com/devcontainers/dotnet",
+        "Microsoft.AspNetCore.**"
+      ]
+    },
+    {
+      "description": "xUnit and the test runner tooling move together.",
+      "groupName": "test tooling",
+      "matchDatasources": ["nuget"],
+      "matchPackageNames": ["xunit", "xunit.**", "Microsoft.NET.Test.Sdk", "coverlet.collector"]
+    }
+  ]
+}
