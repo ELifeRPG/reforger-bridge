@@ -15,7 +15,8 @@ as it is:
 
 | Route | Fields |
 |---|---|
-| Bank account summaries (`GET bank-accounts/{number}`, the account lists) | `balanceStr` |
+| Banks (`GET banks`) | `feeTermsStr` |
+| Bank account summaries (`GET bank-accounts/{number}`, the account lists) | `balanceStr`, `feeTermsStr` |
 | Booking results (`deposit`, `withdraw`, `transaction`) | `amountStr`, `feeStr`, `newBalanceStr` |
 | Ledger rows (`GET bank-accounts/{number}/transactions`) | `amountStr`, `feeStr` |
 
@@ -23,6 +24,11 @@ The format is fixed: a space between thousands, a dot before the cents, a space 
 and a leading `-` for negative values, e.g. `"1 234 567.89 Ŧ"` or `"-42.00 Ŧ"`. A ledger row's `amountStr` is
 signed from the viewing account's side: `-` for `Withdrawn` and `TransferredOut`, `+` otherwise. `kind` is
 still there for anything else that depends on the direction, such as colour.
+
+`feeTermsStr` shows fee terms as the fixed part and the share of the amount, e.g. `"0.20 Ŧ + 2 %"`. A part
+that is zero is left out (`"2 %"`, `"0.20 Ŧ"`), unless both are (`"0.00 Ŧ"`). On an account these are the
+terms copied when it was opened, which are the ones it is charged; on a bank, its current terms. The mod shows
+them instead of computing a fee. The fee actually booked comes back in `feeStr`.
 
 The Bridge formats from the exact decimal the Central API returns, so values of any size show to the cent.
 The Central API stays the only place that calculates with money.
@@ -32,6 +38,3 @@ The Central API stays the only place that calculates with money.
 The mod sends amounts as `amountCents`, a whole number of cents (`12345` for Ŧ123.45). These are amounts the
 mod caps itself, such as at the ATM, so a 32-bit `int` holds them. Anything below one cent, including a
 missing `amountCents`, is refused with `400`.
-
-A bank's fee terms (`transactionFeeBase`, `transactionFeeMultiplier` from `GET banks`) stay numbers. The ATM
-uses them to preview the fee for an amount it caps. The fee that's actually booked comes back in `feeStr`.

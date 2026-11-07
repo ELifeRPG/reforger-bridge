@@ -55,7 +55,7 @@ public sealed class BankingMapperTests
             TransactionFeeMultiplier = new UntypedDecimal(0.02m),
         });
 
-        Assert.Equal(new BankSummary(bankId, "Federal E-Life Bank", "FEBK", 0.20m, 0.02m), summary);
+        Assert.Equal(new BankSummary(bankId, "Federal E-Life Bank", "FEBK", "0.20 Ŧ + 2 %"), summary);
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public sealed class BankingMapperTests
             TransactionFeeMultiplier = new UntypedDecimal(0.02m),
         });
 
-        Assert.Equal(new BankAccountSummary(bankId, "EL90FEBK0123456789", "Personal", characterId, null, "12.50 Ŧ", 0.20m, 0.02m), summary);
+        Assert.Equal(new BankAccountSummary(bankId, "EL90FEBK0123456789", "Personal", characterId, null, "12.50 Ŧ", "0.20 Ŧ + 2 %"), summary);
         Assert.DoesNotContain(
             typeof(BankAccountSummary).GetProperties(),
             property => property.Name == nameof(ApiModels.BankAccountDto.BankAccountId));

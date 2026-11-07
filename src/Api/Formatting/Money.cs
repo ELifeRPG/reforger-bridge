@@ -37,5 +37,22 @@ public static class Money
         return signed > 0 ? "+" + Format(signed) : Format(signed);
     }
 
+    /// <summary>
+    /// A bank's or account's fee terms for display, e.g. <c>"0.20 Ŧ + 2 %"</c>: the fixed part and the
+    /// share of the amount. A part that is zero is left out, unless both are. The mod shows this instead
+    /// of computing a fee; the fee actually booked comes back in a booking's FeeStr.
+    /// </summary>
+    public static string FormatFeeTerms(decimal feeBase, decimal multiplier)
+    {
+        var percent = (multiplier * 100m).ToString("0.####", CultureInfo.InvariantCulture) + " %";
+        return (feeBase, multiplier) switch
+        {
+            (0m, 0m) => Format(0m),
+            (0m, _) => percent,
+            (_, 0m) => Format(feeBase),
+            _ => Format(feeBase) + " + " + percent,
+        };
+    }
+
     public static decimal FromCents(int cents) => cents / 100m;
 }
