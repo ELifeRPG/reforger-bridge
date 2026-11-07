@@ -1,6 +1,8 @@
 using ELifeRPG.Bridge.Api.Extensions;
 using ELifeRPG.Bridge.Api.Formatting;
 using ELifeRPG.BackendApiClient;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Kiota.Abstractions;
 using Microsoft.Kiota.Abstractions.Serialization;
 using ApiModels = ELifeRPG.BackendApiClient.Models;
 
@@ -110,14 +112,10 @@ public static class BankingEndpoints
         group.MapPut("bank-accounts/{number}/deposit", async (
                 string number,
                 DepositRequest request,
+                [FromHeader(Name = IdempotencyKeyHeader)] string? idempotencyKey,
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                if (InvalidBooking(request.AmountCents, request.CharacterId) is { } invalidBooking)
-                {
-                    return invalidBooking;
-                }
-
                 var (bankAccountId, problem) = await ResolveAsync(apiClient, number, "Bank account not found", cancellationToken);
                 if (problem is not null)
                 {
@@ -132,6 +130,7 @@ public static class BankingEndpoints
                             CharacterId = request.CharacterId,
                             Source = request.Source,
                         },
+                        WithIdempotencyKey(idempotencyKey),
                         cancellationToken: cancellationToken),
                     result => result is null
                         ? Results.Problem("Central API returned an empty deposit response.")
@@ -141,20 +140,17 @@ public static class BankingEndpoints
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
             .WithName("DepositToBankAccount")
             .WithDescription("Deposits cash into a bank account.");
 
         group.MapPut("bank-accounts/{number}/withdraw", async (
                 string number,
                 WithdrawRequest request,
+                [FromHeader(Name = IdempotencyKeyHeader)] string? idempotencyKey,
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                if (InvalidBooking(request.AmountCents, request.CharacterId) is { } invalidBooking)
-                {
-                    return invalidBooking;
-                }
-
                 var (bankAccountId, problem) = await ResolveAsync(apiClient, number, "Bank account not found", cancellationToken);
                 if (problem is not null)
                 {
@@ -169,6 +165,7 @@ public static class BankingEndpoints
                             CharacterId = request.CharacterId,
                             Source = request.Source,
                         },
+                        WithIdempotencyKey(idempotencyKey),
                         cancellationToken: cancellationToken),
                     result => result is null
                         ? Results.Problem("Central API returned an empty withdraw response.")
@@ -179,20 +176,17 @@ public static class BankingEndpoints
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
             .WithName("WithdrawFromBankAccount")
             .WithDescription("Withdraws cash from a bank account, e.g. for an ATM.");
 
         group.MapPut("bank-accounts/{number}/transaction", async (
                 string number,
                 TransferRequest request,
+                [FromHeader(Name = IdempotencyKeyHeader)] string? idempotencyKey,
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                if (InvalidBooking(request.AmountCents, request.CharacterId) is { } invalidBooking)
-                {
-                    return invalidBooking;
-                }
-
                 var (bankAccountId, problem) = await ResolveAsync(apiClient, number, "Bank account not found", cancellationToken);
                 if (problem is not null)
                 {
@@ -215,6 +209,7 @@ public static class BankingEndpoints
                             TargetBankAccountId = targetBankAccountId,
                             Source = request.Source,
                         },
+                        WithIdempotencyKey(idempotencyKey),
                         cancellationToken: cancellationToken),
                     result => result is null
                         ? Results.Problem("Central API returned an empty transfer response.")
@@ -225,28 +220,27 @@ public static class BankingEndpoints
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
             .WithName("TransferBankAccountFunds")
             .WithDescription("Transfers cash to another bank account, given its account number as the player typed it (spaces and letter case are ignored).");
 
         return app;
     }
 
-    /// <summary>
-    /// A field missing from the body reads as 0 or an empty Guid. For the amount the backend would refuse
-    /// it too, but the backend client has no error mapping for that 400, so it would reach the mod as a
-    /// 500; an empty characterId the backend would book as the depositor.
-    /// </summary>
-    public static IResult? InvalidBooking(int amountCents, Guid characterId)
-    {
-        if (amountCents <= 0)
-        {
-            return Results.Problem(title: "amountCents must be a positive whole number of cents", statusCode: StatusCodes.Status400BadRequest);
-        }
+    public const string IdempotencyKeyHeader = "Idempotency-Key";
 
-        return characterId == Guid.Empty
-            ? Results.Problem(title: "characterId is required", statusCode: StatusCodes.Status400BadRequest)
-            : null;
-    }
+    /// <summary>
+    /// Passes the mod's Idempotency-Key on to the Central API unchanged. The Central API checks it (400
+    /// when it is missing or longer than 128 characters) and answers a resend with the first response.
+    /// </summary>
+    public static Action<RequestConfiguration<DefaultQueryParameters>> WithIdempotencyKey(string? idempotencyKey)
+        => configuration =>
+        {
+            if (idempotencyKey is not null)
+            {
+                configuration.Headers.Add(IdempotencyKeyHeader, idempotencyKey);
+            }
+        };
 
     /// <summary>
     /// The mod addresses accounts by their number; the Central API by id. Resolves one to the other
