@@ -146,27 +146,24 @@ public sealed class BankingMapperTests
         Assert.Equal(new TransactionResult(transactionId, "1 500.00 Ŧ", "30.20 Ŧ", "-25 000 000.50 Ŧ"), result);
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    public void InvalidBooking_RefusesAnythingBelowOneCent(int amountCents)
+    [Fact]
+    public void WithIdempotencyKey_PassesTheKeyOnUnchanged()
     {
-        var problem = Assert.IsAssignableFrom<IStatusCodeHttpResult>(BankingEndpoints.InvalidBooking(amountCents, Guid.NewGuid()));
+        var configuration = new Microsoft.Kiota.Abstractions.RequestConfiguration<Microsoft.Kiota.Abstractions.DefaultQueryParameters>();
 
-        Assert.Equal(StatusCodes.Status400BadRequest, problem.StatusCode);
+        BankingEndpoints.WithIdempotencyKey("atm-17-1730995200-42")(configuration);
+
+        Assert.Equal(["atm-17-1730995200-42"], configuration.Headers[BankingEndpoints.IdempotencyKeyHeader]);
     }
 
     [Fact]
-    public void InvalidBooking_RefusesAMissingCharacter()
+    public void WithIdempotencyKey_SendsNoHeaderWhenTheModSentNone()
     {
-        var problem = Assert.IsAssignableFrom<IStatusCodeHttpResult>(BankingEndpoints.InvalidBooking(1, Guid.Empty));
+        var configuration = new Microsoft.Kiota.Abstractions.RequestConfiguration<Microsoft.Kiota.Abstractions.DefaultQueryParameters>();
 
-        Assert.Equal(StatusCodes.Status400BadRequest, problem.StatusCode);
-    }
+        BankingEndpoints.WithIdempotencyKey(null)(configuration);
 
-    [Fact]
-    public void InvalidBooking_AcceptsOneCentFromACharacter()
-    {
-        Assert.Null(BankingEndpoints.InvalidBooking(1, Guid.NewGuid()));
+        Assert.False(configuration.Headers.ContainsKey(BankingEndpoints.IdempotencyKeyHeader));
     }
 }
+

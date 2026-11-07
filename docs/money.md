@@ -37,4 +37,4 @@ The Central API stays the only place that calculates with money.
 
 The mod sends amounts as `amountCents`, a whole number of cents (`12345` for Ŧ123.45). These are amounts the
 mod caps itself, such as at the ATM, so a 32-bit `int` holds them. Anything below one cent, including a
-missing `amountCents`, is refused with `400`.
+missing `amountCents`, is refused with `400` by the Central API.
