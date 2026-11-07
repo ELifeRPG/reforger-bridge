@@ -20,6 +20,7 @@ not how to build or run the Bridge itself. For that, see the
   with [Login & Session Bootstrap](workflows/login.md), the first thing that happens when a player
   connects.
 - [Money](money.md): how balances and amounts cross between the mod and the Bridge.
+- [Bookings](banking.md): what deposit, withdraw and transfer take and return, and which conflicts to resend.
 
 For the wider cross-repo system picture — how the Bridge fits alongside the Central API, Keycloak,
 and the other out-of-repo consumers — see `eliferpg-core`'s
