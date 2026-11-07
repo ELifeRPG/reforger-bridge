@@ -221,12 +221,6 @@ public static class BankingEndpoints
     }
 
     /// <summary>
-    /// The mod addresses accounts by their number; the Central API by id. Resolves one to the other
-    /// through the Central API's number filter, which rejects a bad layout or bad check digits (400)
-    /// before any lookup. A valid number nobody holds comes back as an empty list, answered here as
-    /// a 404 with <paramref name="notFoundTitle"/> so a transfer can say which side was missing.
-    /// </summary>
-    /// <summary>
     /// The backend refuses these too, but the backend client has no error mapping for that 400, so it
     /// would reach the mod as a 500. A body without amountCents (e.g. the old decimal "amount") lands here
     /// as 0.
@@ -235,6 +229,12 @@ public static class BankingEndpoints
         ? null
         : Results.Problem(title: "amountCents must be a positive whole number of cents", statusCode: StatusCodes.Status400BadRequest);
 
+    /// <summary>
+    /// The mod addresses accounts by their number; the Central API by id. Resolves one to the other
+    /// through the Central API's number filter, which rejects a bad layout or bad check digits (400)
+    /// before any lookup. A valid number nobody holds comes back as an empty list, answered here as
+    /// a 404 with <paramref name="notFoundTitle"/> so a transfer can say which side was missing.
+    /// </summary>
     private static async Task<(Guid BankAccountId, IResult? Problem)> ResolveAsync(
         EliferpgApiClient apiClient,
         string number,
