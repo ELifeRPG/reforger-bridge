@@ -1,6 +1,8 @@
 using ELifeRPG.Bridge.Api.Extensions;
 using ELifeRPG.Bridge.Api.Formatting;
 using ELifeRPG.BackendApiClient;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Kiota.Abstractions;
 using Microsoft.Kiota.Abstractions.Serialization;
 using ApiModels = ELifeRPG.BackendApiClient.Models;
 
@@ -110,14 +112,10 @@ public static class BankingEndpoints
         group.MapPut("bank-accounts/{number}/deposit", async (
                 string number,
                 DepositRequest request,
+                [FromHeader(Name = IdempotencyKeyHeader)] string? idempotencyKey,
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                if (InvalidAmount(request.AmountCents) is { } invalidAmount)
-                {
-                    return invalidAmount;
-                }
-
                 var (bankAccountId, problem) = await ResolveAsync(apiClient, number, "Bank account not found", cancellationToken);
                 if (problem is not null)
                 {
@@ -126,7 +124,13 @@ public static class BankingEndpoints
 
                 return await ApiCallExtensions.ExecuteAsync(
                     () => apiClient.Api.BankAccounts[bankAccountId].Deposit.PutAsync(
-                        new ApiModels.DepositRequestDto { Amount = new UntypedDecimal(Money.FromCents(request.AmountCents)) },
+                        new ApiModels.DepositRequestDto
+                        {
+                            Amount = new UntypedDecimal(Money.FromCents(request.AmountCents)),
+                            CharacterId = request.CharacterId,
+                            Source = request.Source,
+                        },
+                        WithIdempotencyKey(idempotencyKey),
                         cancellationToken: cancellationToken),
                     result => result is null
                         ? Results.Problem("Central API returned an empty deposit response.")
@@ -136,20 +140,17 @@ public static class BankingEndpoints
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
             .WithName("DepositToBankAccount")
             .WithDescription("Deposits cash into a bank account.");
 
         group.MapPut("bank-accounts/{number}/withdraw", async (
                 string number,
                 WithdrawRequest request,
+                [FromHeader(Name = IdempotencyKeyHeader)] string? idempotencyKey,
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                if (InvalidAmount(request.AmountCents) is { } invalidAmount)
-                {
-                    return invalidAmount;
-                }
-
                 var (bankAccountId, problem) = await ResolveAsync(apiClient, number, "Bank account not found", cancellationToken);
                 if (problem is not null)
                 {
@@ -158,7 +159,13 @@ public static class BankingEndpoints
 
                 return await ApiCallExtensions.ExecuteAsync(
                     () => apiClient.Api.BankAccounts[bankAccountId].Withdraw.PutAsync(
-                        new ApiModels.WithdrawRequestDto { Amount = new UntypedDecimal(Money.FromCents(request.AmountCents)), CharacterId = request.CharacterId },
+                        new ApiModels.WithdrawRequestDto
+                        {
+                            Amount = new UntypedDecimal(Money.FromCents(request.AmountCents)),
+                            CharacterId = request.CharacterId,
+                            Source = request.Source,
+                        },
+                        WithIdempotencyKey(idempotencyKey),
                         cancellationToken: cancellationToken),
                     result => result is null
                         ? Results.Problem("Central API returned an empty withdraw response.")
@@ -169,20 +176,17 @@ public static class BankingEndpoints
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
             .WithName("WithdrawFromBankAccount")
             .WithDescription("Withdraws cash from a bank account, e.g. for an ATM.");
 
         group.MapPut("bank-accounts/{number}/transaction", async (
                 string number,
                 TransferRequest request,
+                [FromHeader(Name = IdempotencyKeyHeader)] string? idempotencyKey,
                 EliferpgApiClient apiClient,
                 CancellationToken cancellationToken) =>
             {
-                if (InvalidAmount(request.AmountCents) is { } invalidAmount)
-                {
-                    return invalidAmount;
-                }
-
                 var (bankAccountId, problem) = await ResolveAsync(apiClient, number, "Bank account not found", cancellationToken);
                 if (problem is not null)
                 {
@@ -203,7 +207,9 @@ public static class BankingEndpoints
                             Amount = new UntypedDecimal(Money.FromCents(request.AmountCents)),
                             CharacterId = request.CharacterId,
                             TargetBankAccountId = targetBankAccountId,
+                            Source = request.Source,
                         },
+                        WithIdempotencyKey(idempotencyKey),
                         cancellationToken: cancellationToken),
                     result => result is null
                         ? Results.Problem("Central API returned an empty transfer response.")
@@ -214,20 +220,27 @@ public static class BankingEndpoints
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
             .WithName("TransferBankAccountFunds")
             .WithDescription("Transfers cash to another bank account, given its account number as the player typed it (spaces and letter case are ignored).");
 
         return app;
     }
 
+    public const string IdempotencyKeyHeader = "Idempotency-Key";
+
     /// <summary>
-    /// The backend refuses these too, but the backend client has no error mapping for that 400, so it
-    /// would reach the mod as a 500. A body without amountCents (e.g. the old decimal "amount") lands here
-    /// as 0.
+    /// Passes the mod's Idempotency-Key on to the Central API unchanged. The Central API checks it (400
+    /// when it is missing or longer than 128 characters) and answers a resend with the first response.
     /// </summary>
-    public static IResult? InvalidAmount(int amountCents) => amountCents > 0
-        ? null
-        : Results.Problem(title: "amountCents must be a positive whole number of cents", statusCode: StatusCodes.Status400BadRequest);
+    public static Action<RequestConfiguration<DefaultQueryParameters>> WithIdempotencyKey(string? idempotencyKey)
+        => configuration =>
+        {
+            if (idempotencyKey is not null)
+            {
+                configuration.Headers.Add(IdempotencyKeyHeader, idempotencyKey);
+            }
+        };
 
     /// <summary>
     /// The mod addresses accounts by their number; the Central API by id. Resolves one to the other
@@ -250,7 +263,7 @@ public static class BankingEndpoints
         }
         catch (ApiModels.ProblemDetails problem)
         {
-            return (Guid.Empty, Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode));
+            return (Guid.Empty, ApiCallExtensions.ToProblem(problem));
         }
 
         return BankAccountLookup.SingleId(matches) is { } bankAccountId
@@ -267,20 +280,21 @@ public static class BankAccountLookup
 }
 
 /// <summary>Code is the four letters embedded in every account number the bank issues.</summary>
-public sealed record BankSummary(Guid BankId, string Name, string Code, decimal TransactionFeeBase, decimal TransactionFeeMultiplier)
+/// <summary>FeeTermsStr is the bank's current fee terms as display text (see <see cref="Money.FormatFeeTerms"/>).</summary>
+public sealed record BankSummary(Guid BankId, string Name, string Code, string FeeTermsStr)
 {
     public static BankSummary Create(ApiModels.BankDto source) => new(
         source.BankId!.Value,
         source.Name!,
         source.Code!,
-        source.TransactionFeeBase!.ToDecimal(),
-        source.TransactionFeeMultiplier!.ToDecimal());
+        Money.FormatFeeTerms(source.TransactionFeeBase!.ToDecimal(), source.TransactionFeeMultiplier!.ToDecimal()));
 }
 
 /// <summary>
 /// Carries no account id: the mod addresses accounts by Number (compact, e.g. EL90FEBK0123456789;
 /// group it in fours for display), and the Bridge resolves it to the Central API's id. Money goes to
-/// the mod as display text only (see <see cref="Money"/>).
+/// the mod as display text only (see <see cref="Money"/>), including FeeTermsStr: the fee terms copied
+/// when the account was opened, which are the ones it is charged.
 /// </summary>
 public sealed record BankAccountSummary(
     Guid BankId,
@@ -288,7 +302,8 @@ public sealed record BankAccountSummary(
     string Type,
     Guid? CharacterId,
     Guid? CompanyId,
-    string BalanceStr)
+    string BalanceStr,
+    string FeeTermsStr)
 {
     public static BankAccountSummary Create(ApiModels.BankAccountDto source) => new(
         source.BankId!.Value,
@@ -296,49 +311,64 @@ public sealed record BankAccountSummary(
         source.Type!,
         source.CharacterId,
         source.CompanyId,
-        Money.Format(source.Balance!.ToDecimal()));
+        Money.Format(source.Balance!.ToDecimal()),
+        Money.FormatFeeTerms(source.TransactionFeeBase!.ToDecimal(), source.TransactionFeeMultiplier!.ToDecimal()));
 }
 
 /// <summary>
 /// CounterpartyNumber is the other account's number for a transfer; null otherwise. AmountStr is signed
 /// from this account's point of view (<c>-</c> for Withdrawn and TransferredOut, <c>+</c> otherwise);
-/// Kind stays for anything else that depends on the direction, such as colour.
+/// Kind stays for anything else that depends on the direction, such as colour. TransactionId is shared
+/// by both rows of a transfer and is what a booking response returned; Source is what the booking
+/// request sent, e.g. an ATM's id.
 /// </summary>
 public sealed record BankAccountTransaction(
+    Guid TransactionId,
     string Kind,
     string AmountStr,
     string FeeStr,
     Guid? ActingCharacterId,
     string? CounterpartyNumber,
+    string? Source,
     DateTimeOffset OccurredAt)
 {
     public static BankAccountTransaction Create(ApiModels.BankAccountTransactionDto source) => new(
+        source.TransactionId!.Value,
         source.Kind!,
         Money.FormatSigned(source.Amount!.ToDecimal(), IsOutgoing(source.Kind!)),
         Money.Format(source.Fee!.ToDecimal()),
         source.ActingCharacterId,
         source.CounterpartyNumber,
+        source.Source,
         source.OccurredAt!.Value);
 
     private static bool IsOutgoing(string kind) => kind is "Withdrawn" or "TransferredOut";
 }
 
-/// <summary>AmountCents is in whole cents, e.g. 12345 for 123.45.</summary>
-public sealed record DepositRequest(int AmountCents);
+/// <summary>
+/// AmountCents is in whole cents, e.g. 12345 for 123.45. CharacterId is who made the deposit; it is
+/// recorded on the ledger row, not checked against the owner. Source is optional, 1 to 128 characters,
+/// e.g. the ATM's id, and comes back on the ledger row.
+/// </summary>
+public sealed record DepositRequest(int AmountCents, Guid CharacterId, string? Source = null);
 
-/// <summary>AmountCents is in whole cents, e.g. 12345 for 123.45.</summary>
-public sealed record WithdrawRequest(int AmountCents, Guid CharacterId);
+/// <summary>AmountCents is in whole cents, e.g. 12345 for 123.45. Source as on <see cref="DepositRequest"/>.</summary>
+public sealed record WithdrawRequest(int AmountCents, Guid CharacterId, string? Source = null);
 
 /// <summary>
 /// AmountCents is in whole cents, e.g. 12345 for 123.45. TargetNumber is the recipient's account number
-/// as the player typed it.
+/// as the player typed it. Source as on <see cref="DepositRequest"/>.
 /// </summary>
-public sealed record TransferRequest(int AmountCents, Guid CharacterId, string TargetNumber);
+public sealed record TransferRequest(int AmountCents, Guid CharacterId, string TargetNumber, string? Source = null);
 
-/// <summary>The booking's figures as display text (see <see cref="Money"/>).</summary>
-public sealed record TransactionResult(string AmountStr, string FeeStr, string NewBalanceStr)
+/// <summary>
+/// The booking's id, which its ledger rows carry too, and its figures as display text (see
+/// <see cref="Money"/>).
+/// </summary>
+public sealed record TransactionResult(Guid TransactionId, string AmountStr, string FeeStr, string NewBalanceStr)
 {
     public static TransactionResult Create(ApiModels.TransactionResultDto source) => new(
+        source.TransactionId!.Value,
         Money.Format(source.Amount!.ToDecimal()),
         Money.Format(source.Fee!.ToDecimal()),
         Money.Format(source.NewBalance!.ToDecimal()));

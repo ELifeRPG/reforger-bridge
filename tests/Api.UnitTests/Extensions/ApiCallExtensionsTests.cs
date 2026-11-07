@@ -38,4 +38,31 @@ public sealed class ApiCallExtensionsTests
         Assert.Equal("Something went wrong", problemResult.ProblemDetails.Title);
         Assert.Equal("Details here", problemResult.ProblemDetails.Detail);
     }
+
+    [Fact]
+    public void ToProblem_PassesOnCodeAndRetryable()
+    {
+        var result = ApiCallExtensions.ToProblem(new ApiModels.ProblemDetails
+        {
+            Title = "Another operation already committed against this account",
+            ResponseStatusCode = 409,
+            Code = "concurrent_modification",
+            Retryable = true,
+        });
+
+        var problem = Assert.IsAssignableFrom<ProblemHttpResult>(result).ProblemDetails;
+        Assert.Equal("concurrent_modification", problem.Extensions["code"]);
+        Assert.Equal(true, problem.Extensions["retryable"]);
+    }
+
+    [Fact]
+    public void ToProblem_LeavesThemOutWhenTheCentralApiDoesNotSetThem()
+    {
+        var result = ApiCallExtensions.ToProblem(new ApiModels.ProblemDetails { Title = "Bank account not found", ResponseStatusCode = 404 });
+
+        var problem = Assert.IsAssignableFrom<ProblemHttpResult>(result).ProblemDetails;
+        Assert.False(problem.Extensions.ContainsKey("code"));
+        Assert.False(problem.Extensions.ContainsKey("retryable"));
+    }
 }
+

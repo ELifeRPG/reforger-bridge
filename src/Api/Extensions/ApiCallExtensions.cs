@@ -18,9 +18,34 @@ public static class ApiCallExtensions
         }
         catch (ApiModels.ProblemDetails problem)
         {
-            return Results.Problem(title: problem.Title, detail: problem.Detail, statusCode: problem.ResponseStatusCode);
+            return ToProblem(problem);
         }
 
         return onSuccess(result);
+    }
+
+    /// <summary>
+    /// Passes a Central API problem on to the mod, including <c>code</c> (e.g. insufficient_balance)
+    /// and <c>retryable</c> when the Central API sets them, so the mod can tell a refusal from a
+    /// conflict worth resending.
+    /// </summary>
+    public static IResult ToProblem(ApiModels.ProblemDetails problem)
+    {
+        var extensions = new Dictionary<string, object?>();
+        if (problem.Code is { } code)
+        {
+            extensions["code"] = code;
+        }
+
+        if (problem.Retryable is { } retryable)
+        {
+            extensions["retryable"] = retryable;
+        }
+
+        return Results.Problem(
+            title: problem.Title,
+            detail: problem.Detail,
+            statusCode: problem.ResponseStatusCode,
+            extensions: extensions);
     }
 }
