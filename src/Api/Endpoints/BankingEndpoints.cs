@@ -41,18 +41,6 @@ public static class BankingEndpoints
             .WithName("OpenBankAccount")
             .WithDescription("Opens a bank account for a character (Personal) or a company (Corporate) — provide exactly one of characterId/companyId.");
 
-        group.MapGet("characters/{characterId:guid}/bank-accounts", async (
-                Guid characterId,
-                EliferpgApiClient apiClient,
-                CancellationToken cancellationToken) =>
-            {
-                var accounts = await apiClient.Api.Characters[characterId].BankAccounts.GetAsync(cancellationToken: cancellationToken);
-                return Results.Ok(accounts?.Select(BankAccountSummary.Create).ToList() ?? []);
-            })
-            .Produces<IEnumerable<BankAccountSummary>>()
-            .WithName("ListCharacterBankAccounts")
-            .WithDescription("Lists a character's personal bank accounts.");
-
         group.MapGet("companies/{companyId:guid}/bank-accounts", async (
                 Guid companyId,
                 EliferpgApiClient apiClient,
