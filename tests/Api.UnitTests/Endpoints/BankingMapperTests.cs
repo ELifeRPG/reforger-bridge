@@ -72,15 +72,39 @@ public sealed class BankingMapperTests
             Type = "Personal",
             CharacterId = characterId,
             CompanyId = null,
+            CompanyName = null,
             Balance = new UntypedDecimal(12.5m),
             TransactionFeeBase = new UntypedDecimal(0.20m),
             TransactionFeeMultiplier = new UntypedDecimal(0.02m),
         });
 
-        Assert.Equal(new BankAccountSummary(bankId, "EL90FEBK0123456789", "Personal", characterId, null, "12.50 Ŧ", "0.20 Ŧ + 2 %"), summary);
+        Assert.Equal(new BankAccountSummary(bankId, "EL90FEBK0123456789", "Personal", characterId, null, null, "12.50 Ŧ", "0.20 Ŧ + 2 %"), summary);
         Assert.DoesNotContain(
             typeof(BankAccountSummary).GetProperties(),
             property => property.Name == nameof(ApiModels.BankAccountDto.BankAccountId));
+    }
+
+    [Fact]
+    public void BankAccountSummary_Create_CarriesTheCompanyNameOfACompanyAccount()
+    {
+        var companyId = Guid.NewGuid();
+
+        var summary = BankAccountSummary.Create(new ApiModels.BankAccountDto
+        {
+            BankAccountId = Guid.NewGuid(),
+            BankId = Guid.NewGuid(),
+            Number = "EL90FEBK0123456789",
+            Type = "Corporate",
+            CharacterId = null,
+            CompanyId = companyId,
+            CompanyName = "Acme Corp",
+            Balance = new UntypedDecimal(12.5m),
+            TransactionFeeBase = new UntypedDecimal(0.20m),
+            TransactionFeeMultiplier = new UntypedDecimal(0.02m),
+        });
+
+        Assert.Equal(companyId, summary.CompanyId);
+        Assert.Equal("Acme Corp", summary.CompanyName);
     }
 
     [Fact]

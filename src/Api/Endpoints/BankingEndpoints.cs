@@ -65,6 +65,22 @@ public static class BankingEndpoints
             .WithName("ListCompanyBankAccounts")
             .WithDescription("Lists a company's corporate bank accounts.");
 
+        group.MapGet("bank-accounts", async (
+                [FromQuery] Guid? managedBy,
+                EliferpgApiClient apiClient,
+                CancellationToken cancellationToken) =>
+            {
+                return await ApiCallExtensions.ExecuteAsync(
+                    () => apiClient.Api.BankAccounts.GetAsync(
+                        configuration => configuration.QueryParameters.ManagedBy = managedBy,
+                        cancellationToken),
+                    accounts => Results.Ok(accounts?.Select(BankAccountSummary.Create).ToList() ?? []));
+            })
+            .Produces<IEnumerable<BankAccountSummary>>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .WithName("ListManagedBankAccounts")
+            .WithDescription("Lists the bank accounts the character in managedBy (required) may withdraw from: their personal accounts, plus the accounts of every company in which their position includes ManageFinances. Company accounts carry companyName.");
+
         group.MapGet("bank-accounts/{number}", async (
                 string number,
                 EliferpgApiClient apiClient,
@@ -244,7 +260,7 @@ public static class BankingEndpoints
 
     /// <summary>
     /// The mod addresses accounts by their number; the Central API by id. Resolves one to the other
-    /// through the Central API's number filter, which rejects a bad layout or bad check digits (400)
+    /// through the Central API's number lookup, which rejects a bad layout or bad check digits (400)
     /// before any lookup. A valid number nobody holds comes back as an empty list, answered here as
     /// a 404 with <paramref name="notFoundTitle"/> so a transfer can say which side was missing.
     /// </summary>
@@ -257,7 +273,7 @@ public static class BankingEndpoints
         List<ApiModels.BankAccountLookupDto>? matches;
         try
         {
-            matches = await apiClient.Api.BankAccounts.GetAsync(
+            matches = await apiClient.Api.BankAccounts.LookupId.GetAsync(
                 configuration => configuration.QueryParameters.Number = number,
                 cancellationToken);
         }
@@ -302,6 +318,7 @@ public sealed record BankAccountSummary(
     string Type,
     Guid? CharacterId,
     Guid? CompanyId,
+    string? CompanyName,
     string BalanceStr,
     string FeeTermsStr)
 {
@@ -311,6 +328,7 @@ public sealed record BankAccountSummary(
         source.Type!,
         source.CharacterId,
         source.CompanyId,
+        source.CompanyName,
         Money.Format(source.Balance!.ToDecimal()),
         Money.FormatFeeTerms(source.TransactionFeeBase!.ToDecimal(), source.TransactionFeeMultiplier!.ToDecimal()));
 }
