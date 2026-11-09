@@ -17,7 +17,7 @@ jobs:
       packages: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Credentials stay out of the committed NuGet.config, so the devcontainer's mounted
       # ~/.nuget isn't overridden by it. CI injects its own into the checked-out copy.
@@ -48,7 +48,7 @@ jobs:
     env:
       IMAGE: ghcr.io/eliferpg/reforger-bridge
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build image
         env:
