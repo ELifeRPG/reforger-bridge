@@ -16,7 +16,7 @@ as it is:
 | Route | Fields |
 |---|---|
 | Banks (`GET banks`) | `feeTermsStr` |
-| Bank account summaries (`GET bank-accounts/{number}`, the account lists) | `balanceStr`, `feeTermsStr` |
+| Bank account summaries (`GET bank-accounts/{number}`, the managed-accounts list `GET bank-accounts?managedBy=`) | `balanceStr`, `feeTermsStr` |
 | Booking results (`deposit`, `withdraw`, `transaction`) | `amountStr`, `feeStr`, `newBalanceStr` |
 | Ledger rows (`GET bank-accounts/{number}/transactions`) | `amountStr`, `feeStr` |
 
