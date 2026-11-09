@@ -22,7 +22,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # Same image as ci.yml and .devcontainer/Dockerfile's base.
-    container: mcr.microsoft.com/devcontainers/dotnet:2.1.4-11.0-preview
+    container: mcr.microsoft.com/devcontainers/dotnet:2.1.4-11.0-preview@sha256:f759399802ad1c14979059653e9c08de6cff2af5b1f767e0596c72c9c5ca9b22
     permissions:
       contents: read
       packages: read
