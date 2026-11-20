@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+# syntax=docker/dockerfile:1@sha256:572cebbc2b15e6f84c077742952674889cb63cd5e9b80abdffcbe587b6f19183
 FROM mcr.microsoft.com/dotnet/sdk:11.0.100-preview.6@sha256:21583a8eeae95b29bb323948e984f387d7d990919a87a1a88e360295166ffcaa AS build
 WORKDIR /src
 COPY . .
